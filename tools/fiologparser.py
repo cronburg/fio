@@ -27,113 +27,84 @@ def parse_args():
     parser.add_argument('-s', '--sum', dest='sum', action='store_true', default=False, help='print the sum for each interval.')
     parser.add_argument("FILE", help="collectl log output files to parse", nargs="+")
     args = parser.parse_args()
-
     return args
 
-def get_ftime(series):
-    ftime = 0
-    for ts in series:
-        if ftime == 0 or ts.last.end < ftime:
-            ftime = ts.last.end
-    return ftime
+class Interval():
+    def __init__(self, ctx, start, end, series):
+        self.ctx = ctx
+        self.start = start
+        self.end = end
+        self.series = series
 
-def print_full(ctx, series):
-    ftime = get_ftime(series)
-    start = 0 
-    end = ctx.interval
+    def get_samples(self):
+        return [item for sublist in [ts.get_samples(self.start, self.end) for ts in self.series] for item in sublist]
 
-    while (start < ftime):
-        end = ftime if ftime < end else end
-        samples_array = [ts.get_samples(start, end) for ts in series]
-        wa = [weighted_average(samples, start, end, 1) for samples in samples_array]
-        print "%s, %s" % (end, ', '.join(["%0.3f" % i for i in wa]))
-        start += ctx.interval
-        end += ctx.interval
+    def get_min(self):
+        return min([sample.value for sample in self.get_samples()])
 
-def print_sums(ctx, series):
-    ftime = get_ftime(series)
-    start = 0
-    end = ctx.interval
+    def get_max(self):
+        return max([sample.value for sample in self.get_samples()])
 
-    while (start < ftime):
-        end = ftime if ftime < end else end
-        samples_array = [ts.get_samples(start, end) for ts in series]
-        total = sum([weighted_average(samples, start, end, 1) for samples in samples_array])
-        print "%s, %0.3f" % (end, total)
-        start += ctx.interval
-        end += ctx.interval
+    def get_wa(self, samples, weight):
+        total = 0
+        for sample in samples:
+            total += sample.value * sample.get_weight(self.start, self.end)
+        return total / weight
 
-def print_averages(ctx, series):
-    ftime = get_ftime(series)
-    start = 0
-    end = ctx.interval
+    def get_wa_list(self):
+        samples_list = [ts.get_samples(self.start, self.end) for ts in self.series]
+        return [self.get_wa(samples, 1) for samples in samples_list]
 
-    while (start < ftime):
-        end = ftime if ftime < end else end
-        samples_array = [ts.get_samples(start, end) for ts in series]
-        samples = [item for sublist in samples_array for item in sublist]
-        print "%s, %0.3f" % (end, weighted_average(samples, start, end, len(series)))
-        start += ctx.interval
-        end += ctx.interval
+    def get_wa_sum(self):
+        return sum(self.get_wa_list())
 
-def print_all_stats(ctx, series):
-    ftime = get_ftime(series)
-    start = 0 
-    end = ctx.interval
-    print('start-time, samples, min, avg, median, 90%, 95%, 99%, max')
-    while (start < ftime):  # for each time interval
-        end = ftime if ftime < end else end
-        # compute all stats and print them
-        samples_array = [ts.get_samples(start, end) for ts in series]
-        samples = [item for sublist in samples_array for item in sublist]
-        mymin = min([sample.value for sample in samples])
-        myavg = weighted_average(samples, start, end, len(series)) 
-        mymedian = weighted_percentile(samples, start, end, len(series), 0.5)
-        my90th = weighted_percentile(samples, start, end, len(series), 0.90) 
-        my95th = weighted_percentile(samples, start, end, len(series), 0.95)
-        my99th = weighted_percentile(samples, start, end, len(series), 0.99)
-        mymax = max([sample.value for sample in samples])
-        print( '%f, %d, %f, %f, %f, %f, %f, %f, %f' % (
-            end, len(samples), 
-            mymin, myavg, mymedian, my90th, my95th, my99th, mymax))
+    def get_wa_avg(self):
+        return self.get_wa_sum() / len(self.series)
 
-        # advance to next interval
-        start += ctx.interval
-        end += ctx.interval
+    def get_wp(self, p):
+        samples = self.get_samples()
+        samples.sort(key=lambda x: x.value)
 
-def weighted_average(samples, start, end, total_weight):
-    total = 0
-    for sample in samples:
-        total += sample.value * sample.get_weight(start, end)
-    return total / total_weight
+        weight = 0
+        last = None
+        cur = None
 
-def weighted_percentile(samples, start, end, total_weight, p):
-    s=sorted(samples, key=lambda x: x.value)
-    weight = 0
-    last = None
-    cur = None
+        # first find the two samples that straddle the percentile based on weight
+        for sample in samples:
+            if weight >= len(self.series) * p:
+                break
+            weight += sample.get_weight(self.start, self.end)
+            last = cur
+            cur = sample
 
-    # first find the two samples that straddle the percentile based on weight
-    for sample in s:
-        if weight > total_weight * p:
-           break
-        weight += sample.get_weight(start, end) 
-        last = cur
-        cur = sample
+        # next find weights based inversely on the distance to the percentile boundary
+        ld = len(self.series) - weight + cur.get_weight(self.start, self.end)
+        cd = weight - len(self.series) * p
+        lw =  1 - (ld / (ld + cd))
+        cw =  1 - (cd / (ld + cd))
 
-    # next find the weighted average of those two samples
-    lw = last.get_weight(start, end)
-    cw = cur.get_weight(start, end)
-    tw = lw + cw 
-    return (last.value * lw + cur.value * cw) / tw 
+        return last.value * lw + cur.value * cw
 
-def print_default(ctx, series):
-    start = 0
-    end = get_ftime(series) 
+    @staticmethod
+    def get_ftime(series):
+        ftime = 0
+        for ts in series:
+            if ftime == 0 or ts.last.end < ftime:
+                ftime = ts.last.end
+        return ftime
 
-    samples_array = [ts.get_samples(start, end) for ts in series]
-    total = sum([weighted_average(samples, start, end, 1) for samples in samples_array])
-    print "%0.3f" % (total)
+    @staticmethod
+    def get_intervals(series, itime):
+        intervals = []
+        ftime = Interval.get_ftime(series)
+        start = 0
+        end = itime
+        while (start < ftime):
+            end = ftime if ftime < end else end
+            intervals.append(Interval(ctx, start, end, series))
+            start += itime
+            end += itime
+        return intervals
 
 class TimeSeries():
     def __init__(self, ctx, fn):
@@ -178,19 +149,68 @@ class Sample():
         ebound = self.end if end > self.end else end
         return float(ebound-sbound) / (end-start)
 
+class Printer():
+    def __init__(self, ctx, series):
+        self.ctx = ctx
+        self.series = series
+        self.ffmt = "%0.3f"
+
+    def format(self, data):
+        if isinstance(data, float) or isinstance(data, int):
+            data = data / self.ctx.divisor
+            return self.ffmt % data
+        return data
+
+    def print_full(self):
+        for i in Interval.get_intervals(self.series, ctx.interval):
+            value = ', '.join(self.format(j) for j in i.get_wa_list())
+            print "%s, %s" % (self.ffmt % i.end, value)
+
+    def print_sums(self):
+        for i in Interval.get_intervals(self.series, ctx.interval):
+            print "%s, %s" % (self.ffmt % i.end, self.format(i.get_wa_sum()))
+
+
+    def print_averages(self):
+        for i in Interval.get_intervals(self.series, ctx.interval):
+            print "%s, %s" % (self.ffmt % i.end, self.format(i.get_wa_avg()))
+
+    def print_all_stats(self):
+        print('end-time, samples, min, avg, median, 90%, 95%, 99%, max')
+        for i in Interval.get_intervals(self.series, ctx.interval):
+            print(', '.join([
+                self.ffmt % i.end,
+                "%d" % len(i.get_samples()),
+                self.format(i.get_min()),
+                self.format(i.get_wa_avg()),
+                self.format(i.get_wp(0.5)),
+                self.format(i.get_wp(0.9)),
+                self.format(i.get_wp(0.95)),
+                self.format(i.get_wp(0.99)),
+                self.format(i.get_max())
+            ]))
+
+    def print_default(self):
+        interval = Interval.get_intervals(self.series, Interval.get_ftime(series))[0]
+        print "%0.3f" % interval.get_wa_sum()
+
+
 if __name__ == '__main__':
     ctx = parse_args()
     series = []
     for fn in ctx.FILE:
-       series.append(TimeSeries(ctx, fn)) 
+        series.append(TimeSeries(ctx, fn))
+
+    p = Printer(ctx, series)
+
     if ctx.sum:
-        print_sums(ctx, series)
+        p.print_sums()
     elif ctx.average:
-        print_averages(ctx, series)
+        p.print_averages()
     elif ctx.full:
-        print_full(ctx, series)
+        p.print_full()
     elif ctx.allstats:
-        print_all_stats(ctx, series)
+        p.print_all_stats()
     else:
-        print_default(ctx, series)
+        p.print_default()
 
