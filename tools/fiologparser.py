@@ -192,7 +192,7 @@ class Printer():
 
     def print_default(self):
         interval = Interval.get_intervals(self.series, Interval.get_ftime(series))[0]
-        print "%0.3f" % interval.get_wa_sum()
+        print self.format(interval.get_wa_sum())
 
 
 if __name__ == '__main__':
