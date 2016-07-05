@@ -584,6 +584,7 @@ void setup_log(struct io_log **log, struct log_params *p,
 	l->log_gz = p->log_gz;
 	l->log_gz_store = p->log_gz_store;
 	l->avg_msec = p->avg_msec;
+  l->hist_msec = p->hist_msec;
 	l->filename = strdup(filename);
 	l->td = p->td;
 
@@ -1353,6 +1354,20 @@ static int write_clat_log(struct thread_data *td, int try, bool unit_log)
 	return ret;
 }
 
+static int write_clat_hist_log(struct thread_data *td, int try, bool unit_log)
+{
+	int ret;
+
+	if (!unit_log)
+		return 0;
+
+	ret = __write_log(td, td->clat_hist_log, try);
+	if (!ret)
+		td->clat_hist_log = NULL;
+
+	return ret;
+}
+
 static int write_lat_log(struct thread_data *td, int try, bool unit_log)
 {
 	int ret;
@@ -1387,8 +1402,9 @@ enum {
 	SLAT_LOG_MASK	= 4,
 	CLAT_LOG_MASK	= 8,
 	IOPS_LOG_MASK	= 16,
+  CLAT_HIST_LOG_MASK = 32,
 
-	ALL_LOG_NR	= 5,
+	ALL_LOG_NR	= 6,
 };
 
 struct log_type {
@@ -1417,6 +1433,10 @@ static struct log_type log_types[] = {
 		.mask	= IOPS_LOG_MASK,
 		.fn	= write_iops_log,
 	},
+  {
+    .mask = CLAT_HIST_LOG_MASK,
+    .fn = write_clat_hist_log,
+  },
 };
 
 void td_writeout_logs(struct thread_data *td, bool unit_logs)

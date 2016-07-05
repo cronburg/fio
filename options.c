@@ -3523,6 +3523,16 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 		.category = FIO_OPT_C_LOG,
 		.group	= FIO_OPT_G_INVALID,
 	},
+  {
+    .name = "log_hist_msec",
+    .lname = "Log histograms (msec)",
+    .type = FIO_OPT_INT,
+    .off1 = td_var_offset(log_hist_msec),
+    .help = "Dump bw/iops/lat histograms at frequency of this time value",
+    .def  = "0",
+    .category = FIO_OPT_C_LOG,
+    .group = FIO_OPT_G_INVALID,
+  },
 	{
 		.name	= "log_max_value",
 		.lname	= "Log maximum instead of average",

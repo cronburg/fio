@@ -1400,6 +1400,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 		struct log_params p = {
 			.td = td,
 			.avg_msec = o->log_avg_msec,
+      .hist_msec = o->log_hist_msec,
 			.log_type = IO_LOG_TYPE_LAT,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1423,18 +1424,24 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 		gen_log_name(logname, sizeof(logname), "clat", o->lat_log_file,
 				td->thread_number, suf, o->per_job_logs);
 		setup_log(&td->clat_log, &p, logname);
+		
+    gen_log_name(logname, sizeof(logname), "clat_hist", o->lat_log_file,
+				td->thread_number, suf, o->per_job_logs);
+		setup_log(&td->clat_hist_log, &p, logname);
 	}
 	if (o->bw_log_file) {
 		struct log_params p = {
 			.td = td,
 			.avg_msec = o->log_avg_msec,
-			.log_type = IO_LOG_TYPE_BW,
+			.hist_msec = o->log_hist_msec,
+      .log_type = IO_LOG_TYPE_BW,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
 			.log_gz_store = o->log_gz_store,
 		};
 		const char *suf;
 
+		p.hist_msec = o->log_hist_msec;
 		if (fio_option_is_set(o, bw_avg_time))
 			p.avg_msec = min(o->log_avg_msec, o->bw_avg_time);
 		else
@@ -1453,13 +1460,15 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 		struct log_params p = {
 			.td = td,
 			.avg_msec = o->log_avg_msec,
-			.log_type = IO_LOG_TYPE_IOPS,
+			.hist_msec = o->log_hist_msec,
+      .log_type = IO_LOG_TYPE_IOPS,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
 			.log_gz_store = o->log_gz_store,
 		};
 		const char *suf;
 
+		p.hist_msec = o->log_hist_msec;
 		if (fio_option_is_set(o, iops_avg_time))
 			p.avg_msec = min(o->log_avg_msec, o->iops_avg_time);
 		else

@@ -19,6 +19,13 @@ struct io_stat {
 };
 
 /*
+ * Use for maintaining histogram logging
+ */
+struct io_hist {
+  uint64_t samples;
+};
+
+/*
  * A single data sample
  */
 struct io_sample {
@@ -102,6 +109,14 @@ struct io_log {
 	struct io_stat avg_window[DDIR_RWDIR_CNT];
 	unsigned long avg_msec;
 	unsigned long avg_last;
+
+  /*
+   * Histogram output, for logging the logarithmic histogram every
+   * so often.
+   */
+  struct io_hist hist_window[DDIR_RWDIR_CNT];
+  unsigned long hist_msec;
+  unsigned long hist_last;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
@@ -218,6 +233,7 @@ extern int iolog_file_inflate(const char *);
 struct log_params {
 	struct thread_data *td;
 	unsigned long avg_msec;
+  unsigned long hist_msec;
 	int log_type;
 	int log_offset;
 	int log_gz;

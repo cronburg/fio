@@ -1962,6 +1962,7 @@ void regrow_logs(struct thread_data *td)
 {
 	regrow_log(td->slat_log);
 	regrow_log(td->clat_log);
+	regrow_log(td->clat_hist_log);
 	regrow_log(td->lat_log);
 	regrow_log(td->bw_log);
 	regrow_log(td->iops_log);
@@ -2116,7 +2117,7 @@ static void add_log_sample(struct thread_data *td, struct io_log *iolog,
 		return;
 
 	elapsed = mtime_since_now(&td->epoch);
-
+  
 	/*
 	 * If no time averaging, just add the log sample.
 	 */
@@ -2152,6 +2153,8 @@ void finalize_logs(struct thread_data *td, bool unit_logs)
 
 	if (td->clat_log && unit_logs)
 		_add_stat_to_log(td->clat_log, elapsed, td->o.log_max != 0);
+	if (td->clat_hist_log && unit_logs)
+		_add_stat_to_log(td->clat_hist_log, elapsed, td->o.log_max != 0);
 	if (td->slat_log && unit_logs)
 		_add_stat_to_log(td->slat_log, elapsed, td->o.log_max != 0);
 	if (td->lat_log && unit_logs)
@@ -2185,7 +2188,13 @@ static void add_clat_percentile_sample(struct thread_stat *ts,
 void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 		     unsigned long usec, unsigned int bs, uint64_t offset)
 {
+	unsigned long elapsed, this_window;
+  int i;
+  unsigned int *io_u_plat = (unsigned int*)(td->ts.io_u_plat);
+  unsigned int b; // number of zero's seen, current bin value
 	struct thread_stat *ts = &td->ts;
+  struct io_log *iolog = td->clat_hist_log;
+  int ddir_i;
 
 	td_io_u_lock(td);
 
@@ -2193,10 +2202,40 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 
 	if (td->clat_log)
 		add_log_sample(td, td->clat_log, usec, ddir, bs, offset);
-
-	if (ts->clat_percentiles)
+	
+  if (ts->clat_percentiles)
 		add_clat_percentile_sample(ts, usec, ddir);
 
+  /* TODO: do this in add_log_sample() for all latency types? */
+  if (td->clat_hist_log) {
+    /*
+     * If dumping histogram, check to see if we've reached the desired time
+     * between histogram samples.
+     */
+    if (iolog->hist_msec) {
+      (iolog->hist_window[ddir].samples)++;
+	    elapsed = mtime_since_now(&td->epoch);
+      this_window = elapsed - iolog->hist_last;
+      if (this_window >= iolog->hist_msec) {
+        
+        //_add_hist_to_log(iolog, elapsed, td->o.log_max != 0);
+        for (ddir_i = 0; ddir_i < DDIR_RWDIR_CNT; ddir_i++) {
+          if (iolog->hist_window[ddir_i].samples) {
+            for (i = 0; i < FIO_IO_U_PLAT_NR; i++) {
+              b = io_u_plat[i];
+              add_log_sample(td, iolog, b, ddir, bs, offset);
+            }
+          }
+        }
+
+        iolog->hist_last = elapsed;
+        iolog->hist_window[ddir].samples = 0; // reset sample count
+      }
+    }
+
+    //add_log_sample(td, td->clat_hist_log, usec, ddir, bs, offset);
+  }
+    
 	td_io_u_unlock(td);
 }
 
