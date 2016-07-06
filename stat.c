@@ -1949,6 +1949,7 @@ static struct io_logs *regrow_log(struct io_log *iolog)
 		dst = get_sample(iolog, cur_log, i);
 		memcpy(dst, src, log_entry_sz(iolog));
 	}
+	cur_log->nr_samples = iolog->pending->nr_samples;
 
 	iolog->pending->nr_samples = 0;
 	return cur_log;
@@ -2153,8 +2154,8 @@ void finalize_logs(struct thread_data *td, bool unit_logs)
 
 	if (td->clat_log && unit_logs)
 		_add_stat_to_log(td->clat_log, elapsed, td->o.log_max != 0);
-	if (td->clat_hist_log && unit_logs)
-		_add_stat_to_log(td->clat_hist_log, elapsed, td->o.log_max != 0);
+	//if (td->clat_hist_log && unit_logs)
+	//	_add_stat_to_log(td->clat_hist_log, elapsed, td->o.log_max != 0);
 	if (td->slat_log && unit_logs)
 		_add_stat_to_log(td->slat_log, elapsed, td->o.log_max != 0);
 	if (td->lat_log && unit_logs)
@@ -2201,13 +2202,13 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 	add_stat_sample(&ts->clat_stat[ddir], usec);
 
 	if (td->clat_log)
-		add_log_sample(td, td->clat_log, usec, ddir, bs, offset);
+    add_log_sample(td, td->clat_log, usec, ddir, bs, offset);
 	
   if (ts->clat_percentiles)
 		add_clat_percentile_sample(ts, usec, ddir);
 
   /* TODO: do this in add_log_sample() for all latency types? */
-  if (td->clat_hist_log) {
+  if (iolog) {
     /*
      * If dumping histogram, check to see if we've reached the desired time
      * between histogram samples.
@@ -2223,7 +2224,14 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
           if (iolog->hist_window[ddir_i].samples) {
             for (i = 0; i < FIO_IO_U_PLAT_NR; i++) {
               b = io_u_plat[i];
-              add_log_sample(td, iolog, b, ddir, bs, offset);
+              //if (i >= 1023) {
+              //  b = io_u_plat[i];
+              //  b = io_u_plat[i];
+              //}
+              if (!ddir_rw(ddir)) continue;
+              __add_log_sample(iolog, b, ddir, bs, elapsed, offset);
+
+              //add_log_sample(td, iolog, b, ddir, bs, offset);
             }
           }
         }

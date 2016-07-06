@@ -660,6 +660,36 @@ void free_log(struct io_log *log)
 	sfree(log);
 }
 
+void flush_hist_samples(FILE *f, void *samples, uint64_t sample_size) {
+	struct io_sample *s;
+	int log_offset;
+	uint64_t i, nr_samples, curr_time;
+
+  if (!sample_size)
+    return;
+  
+  s = __get_sample(samples, 0, 0);
+	log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
+	
+  nr_samples = sample_size / __log_entry_sz(log_offset);
+
+  curr_time = s->time;
+  fprintf(f, "\n%lu, ", curr_time);
+  printf("\n%lu, ", curr_time);
+  for (i = 0; ; i++) {
+		s = __get_sample(samples, log_offset, i);
+    if (s->time != curr_time) {
+      curr_time = s->time;
+      fprintf(f, "\n%lu, ", (unsigned long)curr_time);
+      printf("\n%lu, ", (unsigned long)curr_time);
+    }
+    fprintf(f, "%lu, ", s->val);
+    printf("%lu, ", s->val);
+    if (i == nr_samples)
+      break;
+  }
+}
+
 void flush_samples(FILE *f, void *samples, uint64_t sample_size)
 {
 	struct io_sample *s;
@@ -985,12 +1015,19 @@ void flush_log(struct io_log *log, int do_append)
 	inflate_gz_chunks(log, f);
 
 	while (!flist_empty(&log->io_logs)) {
-		struct io_logs *cur_log;
+		struct io_logs *cur_log, *next_log;
 
 		cur_log = flist_first_entry(&log->io_logs, struct io_logs, list);
 		flist_del_init(&cur_log->list);
-		flush_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
-		sfree(cur_log);
+		next_log = flist_first_entry(&log->io_logs, struct io_logs, list);
+		
+    /* TODO: less hacky solution for histogram logging: */
+    if (log == log->td->clat_hist_log)
+      flush_hist_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
+    else 
+      flush_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
+		
+    sfree(cur_log);
 	}
 
 	fclose(f);

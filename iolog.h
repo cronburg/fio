@@ -48,7 +48,7 @@ enum {
 	IO_LOG_TYPE_IOPS,
 };
 
-#define DEF_LOG_ENTRIES		1024
+#define DEF_LOG_ENTRIES		2048
 #define MAX_LOG_ENTRIES		(1024 * DEF_LOG_ENTRIES)
 
 struct io_logs {
@@ -115,8 +115,8 @@ struct io_log {
    * so often.
    */
   struct io_hist hist_window[DDIR_RWDIR_CNT];
-  unsigned long hist_msec;
-  unsigned long hist_last;
+  unsigned long hist_msec; // time inbetween samples
+  unsigned long hist_last; // time of last sample
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
