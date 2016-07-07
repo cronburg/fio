@@ -48,7 +48,7 @@ enum {
 	IO_LOG_TYPE_IOPS,
 };
 
-#define DEF_LOG_ENTRIES		2048
+#define DEF_LOG_ENTRIES		1024
 #define MAX_LOG_ENTRIES		(1024 * DEF_LOG_ENTRIES)
 
 struct io_logs {

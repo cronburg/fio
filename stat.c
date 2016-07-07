@@ -2186,6 +2186,7 @@ static void add_clat_percentile_sample(struct thread_stat *ts,
 	ts->io_u_plat[ddir][idx]++;
 }
 
+int PREV = 0;
 void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 		     unsigned long usec, unsigned int bs, uint64_t offset)
 {
@@ -2220,24 +2221,27 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
       if (this_window >= iolog->hist_msec) {
         
         //_add_hist_to_log(iolog, elapsed, td->o.log_max != 0);
-        for (ddir_i = 0; ddir_i < DDIR_RWDIR_CNT; ddir_i++) {
-          if (iolog->hist_window[ddir_i].samples) {
-            for (i = 0; i < FIO_IO_U_PLAT_NR; i++) {
+        //for (ddir_i = 0; ddir_i < DDIR_RWDIR_CNT; ddir_i++) {
+        if (iolog->hist_window[ddir].samples) {
+          for (i = 0; i < FIO_IO_U_PLAT_NR; i++) {
+            b = io_u_plat[i];
+            if (i >= 830 && PREV) {
               b = io_u_plat[i];
-              //if (i >= 1023) {
-              //  b = io_u_plat[i];
-              //  b = io_u_plat[i];
-              //}
-              if (!ddir_rw(ddir)) continue;
-              __add_log_sample(iolog, b, ddir, bs, elapsed, offset);
-
-              //add_log_sample(td, iolog, b, ddir, bs, offset);
+              b = io_u_plat[i];
             }
+            if (!ddir_rw(ddir)) continue;
+            //__add_log_sample(iolog, b, ddir, bs, elapsed, offset);
+            struct io_logs *cur_log = get_cur_log(iolog);
+            struct io_sample *s = get_sample(iolog, cur_log, cur_log->nr_samples);
+
+
+            //add_log_sample(td, iolog, b, ddir, bs, offset);
           }
         }
 
         iolog->hist_last = elapsed;
         iolog->hist_window[ddir].samples = 0; // reset sample count
+        PREV++;
       }
     }
 
