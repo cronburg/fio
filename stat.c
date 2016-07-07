@@ -2188,7 +2188,6 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 		     unsigned long usec, unsigned int bs, uint64_t offset)
 {
   unsigned long elapsed, this_window;
-	int i;
   unsigned int *io_u_plat = (unsigned int*)(td->ts.io_u_plat);
 	struct thread_stat *ts = &td->ts;
 	struct io_log *iolog = td->clat_hist_log;
@@ -2203,7 +2202,7 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 	if (ts->clat_percentiles)
 		add_clat_percentile_sample(ts, usec, ddir);
 
-	// TODO: memcpy io_u_plat somewhere, and then spit it out in iolog.c
+	// TODO: make IO sample struct more versatile (typeof(val) == void*?)
 	if (iolog->hist_msec) {
 		(iolog->hist_window[ddir].samples)++;
 		elapsed = mtime_since_now(&td->epoch);
@@ -2215,31 +2214,6 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 			unsigned int* dst = smalloc(FIO_IO_U_PLAT_NR * sizeof(unsigned int));
 			memcpy(dst, io_u_plat, FIO_IO_U_PLAT_NR * sizeof(unsigned int));
 			__add_log_sample(iolog, (uint64_t)dst, ddir, bs, elapsed, offset);
-
-			// FAIL:
-			/*
-			struct io_logs *cur_log = get_cur_log(iolog);
-			if (cur_log) {
-				unsigned int* dst = malloc(FIO_IO_U_PLAT_NR * sizeof(unsigned int));
-				memcpy(dst, io_u_plat, FIO_IO_U_PLAT_NR * sizeof(unsigned int));
-				
-				struct io_sample *s = get_sample(iolog, cur_log, cur_log->nr_samples);
-				*((unsigned int **)s) = dst;
-
-				cur_log->nr_samples++;
-			}*/
-			
-			//add_log_sample(td, iolog, (unsigned int)dst, ddir, bs, offset); // fake log sample
-
-			// FAIL (truncated):
-			/* FILE *f = fopen(iolog->filename, "a");
-			fprintf(f, "%lu, ", (long unsigned int)elapsed);
-			for (i = 0; i < FIO_IO_U_PLAT_NR - 1; i++) {
-				fprintf(f, "%lu, ", io_u_plat[i]);
-			}
-			fprintf(f, "%lu\n", io_u_plat[FIO_IO_U_PLAT_NR - 1]);
-			fclose(f);
-			*/
 
 			iolog->hist_last = elapsed;
 			iolog->hist_window[ddir].samples = 0;
