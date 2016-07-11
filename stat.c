@@ -2215,7 +2215,7 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 			memcpy(dst, io_u_plat, FIO_IO_U_PLAT_NR * sizeof(unsigned int));
 			__add_log_sample(iolog, (uint64_t)dst, ddir, bs, elapsed, offset);
 
-			iolog->hist_last = elapsed;
+			iolog->hist_last = elapsed - (this_window - iolog->hist_msec);
 			iolog->hist_window[ddir].samples = 0;
 		}
 	}
