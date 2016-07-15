@@ -65,13 +65,16 @@ class Interval():
         samples = self.get_samples()
         samples.sort(key=lambda x: x.value)
 
+        if   len(samples) == 0: return 0.0
+        elif len(samples) == 1: return samples[0].value
+
         weight = 0
         last = None
         cur = None
 
         # first find the two samples that straddle the percentile based on weight
         for sample in samples:
-            if weight >= len(self.series) * p:
+            if weight >= len(samples) * p:
                 break
             weight += sample.get_weight(self.start, self.end)
             last = cur
