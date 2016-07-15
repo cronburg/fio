@@ -25,6 +25,8 @@ def parse_args():
                         help='print all stats for each interval.')
     parser.add_argument('-a', '--average', dest='average', action='store_true', default=False, help='print the average for each interval.')
     parser.add_argument('-s', '--sum', dest='sum', action='store_true', default=False, help='print the sum for each interval.')
+    parser.add_argument('-bw', '--bandwidth', dest='bandwidth', action='store_true', default=True, help='input contains bandwidth log files (default).')
+    parser.add_argument('-lat', '--latency', dest='latency', action='store_true', default=False, help='input contains latency log files (defaults to -bw).')
     parser.add_argument("FILE", help="collectl log output files to parse", nargs="+")
     args = parser.parse_args()
     return args
@@ -110,6 +112,9 @@ class Interval():
         return intervals
 
 class TimeSeries():
+
+    USEC_TO_MSEC = 1000.0
+
     def __init__(self, ctx, fn):
         self.ctx = ctx
         self.last = None 
@@ -120,9 +125,12 @@ class TimeSeries():
         f = open(fn, 'r')
         p_time = 0
         for line in f:
-            (time, value, foo, bar) = line.rstrip('\r\n').rsplit(', ')
-            self.add_sample(p_time, int(time), int(value))
-            p_time = int(time)
+            (time, value, _, _) = map(int, line.rstrip('\r\n').rsplit(', '))
+            if   self.ctx.latency:
+              self.add_sample(time - value / TimeSeries.USEC_TO_MSEC, time, value)
+            elif self.ctx.bandwidth:
+              self.add_sample(p_time, time, value)
+            p_time = time
  
     def add_sample(self, start, end, value):
         sample = Sample(ctx, start, end, value)
