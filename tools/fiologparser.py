@@ -38,6 +38,10 @@ class Interval():
         self.end = end
         self.series = series
 
+    def __repr__(self):
+        return "Interval(start=%d, end=%d, series=%s)" \
+            % (self.start, self.end, repr(self.series))
+
     def get_samples(self):
         return [item for sublist in [ts.get_samples(self.start, self.end) for ts in self.series] for item in sublist]
 
@@ -92,6 +96,7 @@ class Interval():
             last = cur
             cur = sample
 
+        import pdb; pdb.set_trace()
         # next find weights based inversely on the distance to the percentile boundary
         ld = len(self.series) - weight + cur.get_weight(self.start, self.end)
         cd = weight - len(self.series) * p
@@ -129,6 +134,10 @@ class TimeSeries():
         self.last = None 
         self.samples = []
         self.read_data(fn)
+
+    def __repr__(self):
+        return "TimeSeries(last=%s, samples=%s)" \
+            % (repr(self.last), repr(self.samples))
 
     def read_data(self, fn):
         f = open(fn, 'r')
@@ -168,6 +177,10 @@ class Sample():
         sbound = self.start if start < self.start else start
         ebound = self.end if end > self.end else end
         return float(ebound-sbound) / (self.end - self.start)
+
+    def __repr__(self):
+        return "Sample(start=%d, end=%d, value=%d)" \
+                % (self.start, self.end, self.value)
 
 class Printer():
     def __init__(self, ctx, series):
