@@ -61,7 +61,17 @@ class Interval():
         return sum(self.get_wa_list())
 
     def get_wa_avg(self):
-        return self.get_wa_sum() / len(self.series)
+        total_values  = 0.0
+        total_weights = 0.0
+        total_samples = 0
+        for ts in self.series:
+            samples = ts.get_samples(self.start, self.end)
+            total_samples += len(samples)
+            for sample in samples:
+                weight = sample.get_weight(self.start, self.end)
+                total_weights += weight
+                total_values  += sample.value * weight
+        return total_values / total_weights / total_samples
 
     def get_wp(self, p):
         samples = self.get_samples()
@@ -105,7 +115,6 @@ class Interval():
         start = 0
         end = itime
         while (start < ftime):
-            end = ftime if ftime < end else end
             intervals.append(Interval(ctx, start, end, series))
             start += itime
             end += itime
@@ -158,7 +167,7 @@ class Sample():
             return 0
         sbound = self.start if start < self.start else start
         ebound = self.end if end > self.end else end
-        return float(ebound-sbound) / (end-start)
+        return float(ebound-sbound) / (self.end - self.start)
 
 class Printer():
     def __init__(self, ctx, series):
@@ -190,7 +199,7 @@ class Printer():
         print('end-time, samples, min, avg, median, 90%, 95%, 99%, max')
         for i in Interval.get_intervals(self.series, ctx.interval):
             print(', '.join([
-                self.ffmt % i.end,
+                "%d" % i.end,
                 "%d" % len(i.get_samples()),
                 self.format(i.get_min()),
                 self.format(i.get_wa_avg()),
