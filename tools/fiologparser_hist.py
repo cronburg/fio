@@ -10,6 +10,7 @@
 
     @author Karl Cronburg <karl.cronburg@gmail.com>
 """
+import sys
 import pandas
 import numpy as np
 from fiologparser_numpy import weights, columns, weighted_percentile, percs, fmt_float_list
@@ -20,7 +21,7 @@ def read_chunk(head_row, rdr, sz):
     """
     try:
         new_arr = rdr.read().values
-    except StopIteration:
+    except (StopIteration, AttributeError):
         return None    
     
     times, hists = new_arr[:,0], new_arr[:,1:]
@@ -37,7 +38,18 @@ def histogram_generator(fps, sz):
     #head_row = np.fromstring(fp.readline(), sep=',')
     head_row  = np.zeros(shape=(1,1216))
     head_rows = {fp: head_row for fp in fps}
-    rdrs = {fp: pandas.read_csv(fp, dtype=int, header=None, chunksize=sz) for fp in fps}
+
+    rdrs = {}
+    for fp in fps:
+        try:
+            rdrs[fp] = pandas.read_csv(fp, dtype=int, header=None, chunksize=sz)
+        except ValueError as e:
+            if e.message == 'No columns to parse from file':
+                sys.stderr.write("WARNING: Empty input file encountered.\n")
+                rdrs[fp] = None
+            else:
+                raise(e)
+
     arrs = {fp: read_chunk(head_row, rdr, sz) for fp,rdr in rdrs.items()}
     while True:
 
