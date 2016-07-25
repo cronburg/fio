@@ -25,6 +25,8 @@ def parse_args():
                         help='print all stats for each interval.')
     parser.add_argument('-a', '--average', dest='average', action='store_true', default=False, help='print the average for each interval.')
     parser.add_argument('-s', '--sum', dest='sum', action='store_true', default=False, help='print the sum for each interval.')
+    parser.add_argument('-bw', '--bandwidth', dest='bandwidth', action='store_true', default=True, help='input contains bandwidth log files (default).')
+    parser.add_argument('-lat', '--latency', dest='latency', action='store_true', default=False, help='input contains latency log files (defaults to -bw).')
     parser.add_argument("FILE", help="collectl log output files to parse", nargs="+")
     args = parser.parse_args()
     return args
@@ -35,6 +37,10 @@ class Interval():
         self.start = start
         self.end = end
         self.series = series
+
+    def __repr__(self):
+        return "Interval(start=%d, end=%d, series=%s)" \
+            % (self.start, self.end, repr(self.series))
 
     def get_samples(self):
         return [item for sublist in [ts.get_samples(self.start, self.end) for ts in self.series] for item in sublist]
@@ -59,31 +65,52 @@ class Interval():
         return sum(self.get_wa_list())
 
     def get_wa_avg(self):
-        return self.get_wa_sum() / len(self.series)
+        total_values  = 0.0
+        total_weights = 0.0
+        total_samples = 0
+        for ts in self.series:
+            samples = ts.get_samples(self.start, self.end)
+            total_samples += len(samples)
+            for sample in samples:
+                weight = sample.get_weight(self.start, self.end)
+                total_weights += weight
+                total_values  += sample.value * weight
+        return total_values / total_weights
 
     def get_wp(self, p):
+        """ Weighted percentile computation for the requested percentile (parameter p).
+            Using a "Weighted Nearest Rank" method. Formulas for Sn, pn, and v are as
+            described here: https://en.wikipedia.org/wiki/Percentile#Weighted_percentile
+
+            Formulas:
+                Sn :: n-th partial sum of the sample weights
+                pn :: weighted percent rank of the nth value in our samples
+                v  :: linearly interpolated value of the P-th percentile
+            
+            Notes:
+                - 0th   percentile is defined to be the smallest value
+                - 100th percentile is defined to be the largest  value
+        """
+        
+        # Nested closures are used to more closely match the mathematical definitions
+        Sn = lambda ws: lambda n: sum(ws[:n+1])
+        _pn = lambda ws: lambda n: 100 / Sn(ws)(len(ws) - 1) * (Sn(ws)(n) - ws[n] / 2.0)
+        def v(vs,ws):
+            pn = _pn(ws)
+            def perc(P):
+                for k,p in enumerate(map(pn, range(len(ws)))):
+                    if p > P:
+                        k = k - 1
+                        if k == -1: return vs[0]
+                        return vs[k] + (P - pn(k)) / (pn(k+1) - pn(k)) * (vs[k+1] - vs[k])
+                return vs[-1]
+            return perc
+
         samples = self.get_samples()
         samples.sort(key=lambda x: x.value)
-
-        weight = 0
-        last = None
-        cur = None
-
-        # first find the two samples that straddle the percentile based on weight
-        for sample in samples:
-            if weight >= len(self.series) * p:
-                break
-            weight += sample.get_weight(self.start, self.end)
-            last = cur
-            cur = sample
-
-        # next find weights based inversely on the distance to the percentile boundary
-        ld = len(self.series) - weight + cur.get_weight(self.start, self.end)
-        cd = weight - len(self.series) * p
-        lw =  1 - (ld / (ld + cd))
-        cw =  1 - (cd / (ld + cd))
-
-        return last.value * lw + cur.value * cw
+        values  = map(lambda s: s.value, samples)
+        weights = map(lambda s: s.get_weight(self.start, self.end), samples)
+        return v(values, weights)(p)
 
     @staticmethod
     def get_ftime(series):
@@ -100,26 +127,38 @@ class Interval():
         start = 0
         end = itime
         while (start < ftime):
-            end = ftime if ftime < end else end
             intervals.append(Interval(ctx, start, end, series))
             start += itime
             end += itime
         return intervals
 
 class TimeSeries():
+
+    USEC_TO_MSEC = 1000.0
+
     def __init__(self, ctx, fn):
         self.ctx = ctx
         self.last = None 
         self.samples = []
         self.read_data(fn)
 
+    def __repr__(self):
+        return "TimeSeries(last=%s, samples=%s)" \
+            % (repr(self.last), repr(self.samples))
+
     def read_data(self, fn):
         f = open(fn, 'r')
         p_time = 0
         for line in f:
-            (time, value, foo, bar) = line.rstrip('\r\n').rsplit(', ')
-            self.add_sample(p_time, int(time), int(value))
-            p_time = int(time)
+            (time, value, _, _) = map(int, line.rstrip('\r\n').rsplit(', '))
+            if   self.ctx.latency:
+                self.add_sample(time - value / TimeSeries.USEC_TO_MSEC, time, value)
+            elif self.ctx.bandwidth:
+                if p_time == time:
+                    raise ValueError("Error: sample start time and end time are same (%d). " % (time,) \
+                                   + "Did you mean to use option '-lat' for latency files?")
+                self.add_sample(p_time, time, value)
+            p_time = time
  
     def add_sample(self, start, end, value):
         sample = Sample(ctx, start, end, value)
@@ -136,6 +175,8 @@ class TimeSeries():
 
 class Sample():
     def __init__(self, ctx, start, end, value):
+        if start == end:
+            raise ValueError("Error: sample start time and end time are same (%d)" % (start,))
         self.ctx = ctx
         self.start = start
         self.end = end
@@ -147,7 +188,11 @@ class Sample():
             return 0
         sbound = self.start if start < self.start else start
         ebound = self.end if end > self.end else end
-        return float(ebound-sbound) / (end-start)
+        return float(ebound-sbound) / (self.end - self.start)
+
+    def __repr__(self):
+        return "Sample(start=%d, end=%d, value=%d)" \
+                % (self.start, self.end, self.value)
 
 class Printer():
     def __init__(self, ctx, series):
@@ -179,14 +224,14 @@ class Printer():
         print('end-time, samples, min, avg, median, 90%, 95%, 99%, max')
         for i in Interval.get_intervals(self.series, ctx.interval):
             print(', '.join([
-                self.ffmt % i.end,
+                "%d" % i.end,
                 "%d" % len(i.get_samples()),
                 self.format(i.get_min()),
                 self.format(i.get_wa_avg()),
-                self.format(i.get_wp(0.5)),
-                self.format(i.get_wp(0.9)),
-                self.format(i.get_wp(0.95)),
-                self.format(i.get_wp(0.99)),
+                self.format(i.get_wp(50)),
+                self.format(i.get_wp(90)),
+                self.format(i.get_wp(95)),
+                self.format(i.get_wp(99)),
                 self.format(i.get_max())
             ]))
 
