@@ -20,52 +20,69 @@ def read_chunk(head_row, rdr, sz):
         differences across neighboring histogram samples.
     """
     try:
+        """ StopIteration occurs when the pandas reader is empty, and AttributeError
+            occurs if rdr is None due to the file being empty. """
         new_arr = rdr.read().values
     except (StopIteration, AttributeError):
         return None    
-    
+
+    """ Extract array of just the times, and histograms matrix without times column.
+        Then, take the sequential difference of each of the rows in the histogram
+        matrix. This is necessary because fio outputs *cumulative* histograms as
+        opposed to histograms with counts just for a particular interval. """
     times, hists = new_arr[:,0], new_arr[:,1:]
     hists_diff   = np.diff(np.append(head_row, hists, axis=0), axis=0).astype(int)
     times = times.reshape((len(times),1))
     arr = np.append(times, hists_diff, axis=1)
+
+    """ hists[-1] will be the row we need to start our differencing with the
+        next time we call read_chunk() on the same rdr """
     return arr, hists[-1]
 
 def get_min(fps, arrs):
     """ Find the file with the current first row with the smallest start time """
     return min([fp for fp in fps if not arrs[fp] is None], key=lambda fp: arrs.get(fp)[0][0][0])
 
-def histogram_generator(fps, sz):
-    #head_row = np.fromstring(fp.readline(), sep=',')
+def histogram_generator(ctx, fps, sz):
+    
+    """ head_row for a particular file keeps track of the last (cumulative)
+        histogram we read. """
     head_row  = np.zeros(shape=(1,1216))
     head_rows = {fp: head_row for fp in fps}
 
+    # Create a chunked pandas reader for each of the files:
     rdrs = {}
     for fp in fps:
         try:
             rdrs[fp] = pandas.read_csv(fp, dtype=int, header=None, chunksize=sz)
         except ValueError as e:
             if e.message == 'No columns to parse from file':
-                sys.stderr.write("WARNING: Empty input file encountered.\n")
+                if not ctx.nowarn: sys.stderr.write("WARNING: Empty input file encountered.\n")
                 rdrs[fp] = None
             else:
                 raise(e)
 
+    # Initial histograms (and corresponding
     arrs = {fp: read_chunk(head_row, rdr, sz) for fp,rdr in rdrs.items()}
     while True:
 
         try:
+            """ ValueError occurs when nothing more to read """
             fp = get_min(fps, arrs)
         except ValueError:
             return
         arr, head_row = arrs[fp]
         yield np.insert(arr[0], 1, fps.index(fp))
         arrs[fp] = arr[1:], head_row
-        
+        head_rows[fp] = head_row
+
         if arrs[fp][0].shape[0] == 0:
-            #import pdb; pdb.set_trace()
             arrs[fp] = read_chunk(head_rows[fp], rdrs[fp], sz)
 
 def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
+    """ Taken from fio's stat.c for calculating the latency value of a bin
+        from that bin's index. """
+
     # MSB <= (FIO_IO_U_PLAT_BITS-1), cannot be rounded off. Use
     # all bits of the sample as index
     if (idx < (FIO_IO_U_PLAT_VAL << 1)):
@@ -88,15 +105,18 @@ def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
     print (fmt % tuple(row))
-
-    #import pylab as p; p.hist(iHist, np.log2(bin_vals)); p.show()
         
 def update_extreme(val, fncn, new_val):
+    """ Calculate min / max in the presence of None values """
     if val is None: return new_val
     else: return fncn(val, new_val)
 
 bin_vals = np.array(map(plat_idx_to_val, np.arange(1216)), dtype=float)
 def process_interval(ctx, samples, iStart, iEnd):
+    """ Construct the weighted histogram for the given interval by scanning
+        through all the histograms and figuring out which of their bins have
+        samples with latencies which overlap with the given interval.
+    """
     
     times, files, hists = samples[:,0], samples[:,1], samples[:,2:]
     iHist = np.zeros(1216)
@@ -119,7 +139,6 @@ def process_interval(ctx, samples, iStart, iEnd):
         ss_cnt += np.sum(hs)
 
         # Update min and max bin values seen if necessary:
-        #import pdb; pdb.set_trace()
         idx = np.where(hs != 0)[0]
         if idx.size > 0:
             mn_bin_val = update_extreme(mn_bin_val, min, bvs[idx][0])
@@ -129,7 +148,7 @@ def process_interval(ctx, samples, iStart, iEnd):
 
 def main(ctx):
     fps = [open(f, 'r') for f in ctx.FILE]
-    gen = histogram_generator(fps, ctx.buff_size)
+    gen = histogram_generator(ctx, fps, ctx.buff_size)
 
     print(', '.join(columns))
 
@@ -195,5 +214,12 @@ if __name__ == '__main__':
        , type=int
        , help='number of decimal places to print floats to'
        )
+    arg( '--nowarn'
+       , dest='nowarn'
+       , action='store_false'
+       , default=True
+       , help='do not print any warning messages to stderr'
+       )
+       
     main(p.parse_args())
 
