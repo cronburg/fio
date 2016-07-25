@@ -113,7 +113,7 @@ def process_interval(ctx, samples, iStart, iEnd):
             mn_bin_val = update_extreme(mn_bin_val, min, bvs[idx][0])
             mx_bin_val = update_extreme(mx_bin_val, max, bvs[idx][-1])
 
-    print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
+    if ss_cnt > 0: print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
 
 def main(ctx):
     fps = [open(f, 'r') for f in ctx.FILE]
@@ -168,7 +168,7 @@ if __name__ == '__main__':
        , help='number of seconds of data to process at a time'
        )
     arg( '-i', '--interval'
-       , default=100
+       , default=1000
        , type=int
        , help='interval width (ms)'
        )
