@@ -106,7 +106,7 @@ def print_full(ctx, vs, ws, ss, end):
 def print_all_stats(ctx, vs, ws, ss_cnt, end):
     ps = weighted_percentile(percs, vs, ws)
 
-    values = [np.min(vs), np.average(vs)] + list(ps) + [np.max(vs)]
+    values = [np.min(vs), sum(vs * ws) / sum(ws)] + list(ps) + [np.max(vs)]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
     print (fmt % tuple(row))
