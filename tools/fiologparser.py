@@ -78,32 +78,24 @@ class Interval():
         return total_values / total_weights / total_samples
 
     def get_wp(self, p):
+        Sn = lambda ws: lambda n: sum(ws[:n+1])
+        _pn = lambda ws: lambda n: 100 / Sn(ws)(len(ws) - 1) * (Sn(ws)(n) - ws[n] / 2.0)
+        def v(vs,ws):
+            pn = _pn(ws)
+            def perc(P):
+                for k,p in enumerate(map(pn, range(len(ws)))):
+                    if p > P:
+                        k = k - 1
+                        if k == -1: return vs[0]
+                        return vs[k] + (P - pn(k)) / (pn(k+1) - pn(k)) * (vs[k+1] - vs[k])
+                return vs[-1]
+            return perc
+
         samples = self.get_samples()
         samples.sort(key=lambda x: x.value)
-
-        if   len(samples) == 0: return 0.0
-        elif len(samples) == 1: return samples[0].value
-
-        weight = 0
-        last = None
-        cur = None
-
-        # first find the two samples that straddle the percentile based on weight
-        for sample in samples:
-            if weight >= len(samples) * p:
-                break
-            weight += sample.get_weight(self.start, self.end)
-            last = cur
-            cur = sample
-
-        import pdb; pdb.set_trace()
-        # next find weights based inversely on the distance to the percentile boundary
-        ld = len(self.series) - weight + cur.get_weight(self.start, self.end)
-        cd = weight - len(self.series) * p
-        lw =  1 - (ld / (ld + cd))
-        cw =  1 - (cd / (ld + cd))
-
-        return last.value * lw + cur.value * cw
+        values  = map(lambda s: s.value, samples)
+        weights = map(lambda s: s.get_weight(self.start, self.end), samples)
+        return v(values, weights)(p)
 
     @staticmethod
     def get_ftime(series):
@@ -216,10 +208,10 @@ class Printer():
                 "%d" % len(i.get_samples()),
                 self.format(i.get_min()),
                 self.format(i.get_wa_avg()),
-                self.format(i.get_wp(0.5)),
-                self.format(i.get_wp(0.9)),
-                self.format(i.get_wp(0.95)),
-                self.format(i.get_wp(0.99)),
+                self.format(i.get_wp(50)),
+                self.format(i.get_wp(90)),
+                self.format(i.get_wp(95)),
+                self.format(i.get_wp(99)),
                 self.format(i.get_max())
             ]))
 
