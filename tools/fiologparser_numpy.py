@@ -45,7 +45,7 @@ def weighted_percentile(percs, vs, ws):
     """
     idx = np.argsort(vs)
     vs, ws = vs[idx], ws[idx] # weights and values sorted by value
-    cdf = 100 * ws.cumsum() / ws.sum()
+    cdf = 100 * (ws.cumsum() - ws / 2.0) / ws.sum()
     return np.interp(percs, cdf, vs) # linear interpolation
 
 def weights(start_ts, end_ts, start, end):
