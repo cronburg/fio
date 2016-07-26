@@ -22,7 +22,11 @@ land, lor, lnot = np.logical_and, np.logical_or, np.logical_not
 from itertools import islice
 import argparse
 import os
-import pandas
+
+try:
+    import pandas
+except ImportError:
+    pass
 
 try:
     import pyximport; pyximport.install()
@@ -130,7 +134,7 @@ def fmt_float_list(ctx, num=1):
 
 def print_sums(ctx, vs, ws, ss, end, divisor=1.0):
     fmt = "%d, " + fmt_float_list(ctx, 1)
-    print (fmt % (end, np.sum(vs * ws) / divisor / ctx.divisor)) 
+    print (fmt % (end, np.sum(vs * ws) / divisor / ctx.divisor))
 
 def print_averages(ctx, vs, ws, ss, end):
     print_sums(ctx, vs, ws, ss, end, divisor=float(len(vs)))
@@ -179,7 +183,7 @@ def process_interval(ctx, samples, start, end):
     else:
       raise Exception("Please specify either --bandwidth or --latency.")
 
-    # Sort by start time:    
+    # Sort by start time:
     idx = lexsort((start_times,))
     samples = samples[idx]
     times,clats = samples[:,0], samples[:,1]
@@ -202,9 +206,17 @@ def process_interval(ctx, samples, start, end):
 
 def read_csv(ctx, fp, sz):
     try:
-        return pandas.read_csv(Reader(islice(fp, sz)), dtype=int, header=None).values
+        gen = islice(fp, sz)
+        try:
+            data = pandas.read_csv(Reader(gen), dtype=int, header=None).values
+        except NameError:
+            with np.warnings.catch_warnings():
+                np.warnings.simplefilter("ignore")
+                data = np.genfromtxt(gen, delimiter=',')
+            if data.shape == (0,): raise ValueError()
     except ValueError:
-        return np.empty((0,5))
+        data = np.empty((0,5))
+    return data
 
 def read_next(ctx, fp, sz):
     data = read_csv(ctx, fp, sz)
