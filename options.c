@@ -3533,6 +3533,15 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
     .category = FIO_OPT_C_LOG,
     .group = FIO_OPT_G_INVALID,
   },
+  {
+    .name = "write_hist_log",
+    .lname = "Write latency histogram logs",
+    .type = FIO_OPT_STR_STORE,
+    .off1 = td_var_offset(hist_log_file),
+    .help = "Write log of latency histograms during run",
+    .category = FIO_OPT_C_LOG,
+    .group = FIO_OPT_G_INVALID,
+  },
 	{
 		.name	= "log_max_value",
 		.lname	= "Log maximum instead of average",

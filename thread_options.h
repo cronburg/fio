@@ -233,6 +233,7 @@ struct thread_options {
 	char *bw_log_file;
 	char *lat_log_file;
 	char *iops_log_file;
+  char *hist_log_file;
 	char *replay_redirect;
 
 	/*
