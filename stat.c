@@ -2203,7 +2203,7 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 		add_clat_percentile_sample(ts, usec, ddir);
 
 	// TODO: make IO sample struct more versatile (typeof(val) == void*?)
-	if (iolog->hist_msec) {
+	if (iolog && iolog->hist_msec) {
 		(iolog->hist_window[ddir].samples)++;
 		elapsed = mtime_since_now(&td->epoch);
 		if (!iolog->hist_last)
