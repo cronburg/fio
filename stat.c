@@ -2188,7 +2188,7 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 		     unsigned long usec, unsigned int bs, uint64_t offset)
 {
   unsigned long elapsed, this_window;
-  unsigned int *io_u_plat = (unsigned int*)(td->ts.io_u_plat);
+  unsigned int *io_u_plat = (unsigned int*)(td->ts.io_u_plat[ddir]);
 	struct thread_stat *ts = &td->ts;
 	struct io_log *iolog = td->clat_hist_log;
 
