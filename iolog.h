@@ -20,6 +20,7 @@ struct io_stat {
 
 struct io_hist {
 	uint64_t samples;
+	unsigned long hist_last;
 };
 
 /*
@@ -110,7 +111,6 @@ struct io_log {
 
 	struct io_hist hist_window[DDIR_RWDIR_CNT];
 	unsigned long hist_msec;
-	unsigned long hist_last;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
