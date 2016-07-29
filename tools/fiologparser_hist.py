@@ -15,6 +15,23 @@ import pandas
 import numpy as np
 from fiologparser_numpy import weights, columns, weighted_percentile, percs, fmt_float_list
 
+__HIST_COLUMNS = 1216
+__NON_HIST_COLUMNS = 3
+__TOTAL_COLUMNS = __HIST_COLUMNS + __NON_HIST_COLUMNS
+    
+def sequential_diffs(head_row, times, rws, hists):
+    """ TODO: Make this code less disgusting in terms of numpy appending """
+    result = np.empty(shape=(0, __HIST_COLUMNS))
+    result_times = np.empty(shape=(1, 0))
+    for i in range(8):
+        idx = np.where(rws == i)
+        diff = np.diff(np.append(head_row[i], hists[idx], axis=0), axis=0).astype(int)
+        result = np.append(diff, result, axis=0)
+        result_times = np.append(times[idx], result_times)
+    idx = np.argsort(result_times)
+    return result[idx]
+    #np.diff(np.append(head_row, hists, axis=0), axis=0).astype(int)
+
 def read_chunk(head_row, rdr, sz):
     """ Read the next chunk of size sz from the given reader, computing the
         differences across neighboring histogram samples.
@@ -30,8 +47,9 @@ def read_chunk(head_row, rdr, sz):
         Then, take the sequential difference of each of the rows in the histogram
         matrix. This is necessary because fio outputs *cumulative* histograms as
         opposed to histograms with counts just for a particular interval. """
-    times, hists = new_arr[:,0], new_arr[:,1:]
-    hists_diff   = np.diff(np.append(head_row, hists, axis=0), axis=0).astype(int)
+    times, rws, szs = new_arr[:,0], new_arr[:,1], new_arr[:,2]
+    hists = new_arr[:,__NON_HIST_COLUMNS:]
+    hists_diff   = sequential_diffs(head_row, times, rws, hists)
     times = times.reshape((len(times),1))
     arr = np.append(times, hists_diff, axis=1)
 
@@ -47,8 +65,8 @@ def histogram_generator(ctx, fps, sz):
     
     """ head_row for a particular file keeps track of the last (cumulative)
         histogram we read. """
-    head_row  = np.zeros(shape=(1,1216))
-    head_rows = {fp: head_row for fp in fps}
+    head_row  = np.zeros(shape=(1, __HIST_COLUMNS))
+    head_rows = {fp: {i: head_row for i in range(8)} for fp in fps}
 
     # Create a chunked pandas reader for each of the files:
     rdrs = {}
@@ -63,7 +81,7 @@ def histogram_generator(ctx, fps, sz):
                 raise(e)
 
     # Initial histograms (and corresponding
-    arrs = {fp: read_chunk(head_row, rdr, sz) for fp,rdr in rdrs.items()}
+    arrs = {fp: read_chunk(head_rows[fp], rdr, sz) for fp,rdr in rdrs.items()}
     while True:
 
         try:
@@ -101,7 +119,8 @@ def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
 def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
     ps = weighted_percentile(percs, vs, ws)
 
-    values = [mn, np.sum(vs * ws) / ss_cnt] + list(ps) + [mx]
+    avg = np.sum(vs * ws) / ss_cnt
+    values = [mn, avg] + list(ps) + [mx]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
     print (fmt % tuple(row))
@@ -111,7 +130,7 @@ def update_extreme(val, fncn, new_val):
     if val is None: return new_val
     else: return fncn(val, new_val)
 
-bin_vals = np.array(map(plat_idx_to_val, np.arange(1216)), dtype=float)
+bin_vals = np.array(map(plat_idx_to_val, np.arange(__HIST_COLUMNS)), dtype=float)
 def process_interval(ctx, samples, iStart, iEnd):
     """ Construct the weighted histogram for the given interval by scanning
         through all the histograms and figuring out which of their bins have
@@ -119,7 +138,7 @@ def process_interval(ctx, samples, iStart, iEnd):
     """
     
     times, files, hists = samples[:,0], samples[:,1], samples[:,2:]
-    iHist = np.zeros(1216)
+    iHist = np.zeros(__HIST_COLUMNS)
     ss_cnt = 0 # number of samples affecting this interval
     mn_bin_val, mx_bin_val = None, None
 

@@ -2191,6 +2191,7 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
   unsigned int *io_u_plat = (unsigned int*)(td->ts.io_u_plat[ddir]);
 	struct thread_stat *ts = &td->ts;
 	struct io_log *iolog = td->clat_hist_log;
+	unsigned long *hist_last;
 
 	td_io_u_lock(td);
 
@@ -2204,19 +2205,20 @@ void add_clat_sample(struct thread_data *td, enum fio_ddir ddir,
 
 	// TODO: make IO sample struct more versatile (typeof(val) == void*?)
 	if (iolog && iolog->hist_msec) {
-		(iolog->hist_window[ddir].samples)++;
+		struct io_hist *hw = &(iolog->hist_window[ddir]);
+		(hw->samples)++;
 		elapsed = mtime_since_now(&td->epoch);
-		if (!iolog->hist_last)
-			iolog->hist_last = elapsed;
-		this_window = elapsed - iolog->hist_last;
+		if (! hw->hist_last)
+			hw->hist_last = elapsed;
+		this_window = elapsed - hw->hist_last;
 		if (this_window >= iolog->hist_msec) {
 				
 			unsigned int* dst = smalloc(FIO_IO_U_PLAT_NR * sizeof(unsigned int));
 			memcpy(dst, io_u_plat, FIO_IO_U_PLAT_NR * sizeof(unsigned int));
 			__add_log_sample(iolog, (uint64_t)dst, ddir, bs, elapsed, offset);
 
-			iolog->hist_last = elapsed - (this_window - iolog->hist_msec);
-			iolog->hist_window[ddir].samples = 0;
+			hw->hist_last = elapsed - (this_window - iolog->hist_msec);
+			hw->samples = 0;
 		}
 	}
 
