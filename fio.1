@@ -309,6 +309,7 @@ Trim and write mixed workload. Blocks will be trimmed first, then the same
 blocks will be written to.
 .RE
 .P
+Fio defaults to read if the option is not specified.
 For mixed I/O, the default split is 50/50. For certain types of io the result
 may still be skewed a bit, since the speed may be different. It is possible to
 specify a number of IO's to do before getting a new offset, this is done by
@@ -602,6 +603,7 @@ position the I/O location.
 .TP
 .B psync
 Basic \fBpread\fR\|(2) or \fBpwrite\fR\|(2) I/O.
+Default on all supported operating systems except for Windows.
 .TP
 .B vsync
 Basic \fBreadv\fR\|(2) or \fBwritev\fR\|(2) I/O. Will emulate queuing by
@@ -623,7 +625,7 @@ POSIX asynchronous I/O using \fBaio_read\fR\|(3) and \fBaio_write\fR\|(3).
 Solaris native asynchronous I/O.
 .TP
 .B windowsaio
-Windows native asynchronous I/O.
+Windows native asynchronous I/O. Default on Windows.
 .TP
 .B mmap
 File is memory mapped with \fBmmap\fR\|(2) and data copied using
@@ -654,7 +656,8 @@ and send/receive. This ioengine defines engine specific options.
 .TP
 .B cpuio
 Doesn't transfer any data, but burns CPU cycles according to \fBcpuload\fR and
-\fBcpucycles\fR parameters.
+\fBcpuchunks\fR parameters. A job never finishes unless there is at least one
+non-cpuio job.
 .TP
 .B guasi
 The GUASI I/O engine is the Generic Userspace Asynchronous Syscall Interface
@@ -1149,7 +1152,7 @@ Allocation method for I/O unit buffer.  Allowed values are:
 .RS
 .TP
 .B malloc
-Allocate memory with \fBmalloc\fR\|(3).
+Allocate memory with \fBmalloc\fR\|(3). Default memory type.
 .TP
 .B shm
 Use shared memory buffers allocated through \fBshmget\fR\|(2).
@@ -1692,13 +1695,13 @@ Some parameters are only valid when a specific ioengine is in use. These are
 used identically to normal parameters, with the caveat that when used on the
 command line, they must come after the ioengine.
 .TP
-.BI (cpu)cpuload \fR=\fPint
+.BI (cpuio)cpuload \fR=\fPint
 Attempt to use the specified percentage of CPU cycles.
 .TP
-.BI (cpu)cpuchunks \fR=\fPint
+.BI (cpuio)cpuchunks \fR=\fPint
 Split the load into cycles of the given time. In microseconds.
 .TP
-.BI (cpu)exit_on_io_done \fR=\fPbool
+.BI (cpuio)exit_on_io_done \fR=\fPbool
 Detect when IO threads are done, then exit.
 .TP
 .BI (libaio)userspace_reap

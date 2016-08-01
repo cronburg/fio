@@ -405,6 +405,7 @@ rw=str		Type of io pattern. Accepted values are:
 			trimwrite	Mixed trims and writes. Blocks will be
 					trimmed first, then written to.
 
+		Fio defaults to read if the option is not specified.
 		For the mixed io types, the default is to split them 50/50.
 		For certain types of io the result may still be skewed a bit,
 		since the speed may be different. It is possible to specify
@@ -699,7 +700,8 @@ ioengine=str	Defines how the job issues io to the file. The following
 			sync	Basic read(2) or write(2) io. lseek(2) is
 				used to position the io location.
 
-			psync 	Basic pread(2) or pwrite(2) io.
+			psync 	Basic pread(2) or pwrite(2) io. Default on all
+				supported operating systems except for Windows.
 
 			vsync	Basic readv(2) or writev(2) IO.
 
@@ -717,6 +719,7 @@ ioengine=str	Defines how the job issues io to the file. The following
 			solarisaio Solaris native asynchronous io.
 
 			windowsaio Windows native asynchronous io.
+				Default on Windows.
 
 			mmap	File is memory mapped and data copied
 				to/from using memcpy(3).
@@ -749,12 +752,13 @@ ioengine=str	Defines how the job issues io to the file. The following
 
 			cpuio	Doesn't transfer any data, but burns CPU
 				cycles according to the cpuload= and
-				cpucycle= options. Setting cpuload=85
+				cpuchunks= options. Setting cpuload=85
 				will cause that job to do nothing but burn
 				85% of the CPU. In case of SMP machines,
 				use numjobs=<no_of_cpu> to get desired CPU
 				usage, as the cpuload only loads a single
-				CPU at the desired rate.
+				CPU at the desired rate. A job never finishes
+				unless there is at least one non-cpuio job.
 
 			guasi	The GUASI IO engine is the Generic Userspace
 				Asyncronous Syscall Interface approach
@@ -1064,7 +1068,8 @@ nice=int	Run the job with the given nice value. See man nice(2).
 
 prio=int	Set the io priority value of this job. Linux limits us to
 		a positive value between 0 and 7, with 0 being the highest.
-		See man ionice(1).
+		See man ionice(1). Refer to an appropriate manpage for
+		other operating systems since meaning of priority may differ.
 
 prioclass=int	Set the io priority class. See man ionice(1).
 
@@ -1220,6 +1225,7 @@ mem=str		Fio can use various types of memory as the io unit buffer.
 		The allowed values are:
 
 			malloc	Use memory from malloc(3) as the buffers.
+				Default memory type.
 
 			shm	Use shared memory as the buffers. Allocated
 				through shmget(2).
@@ -1834,12 +1840,12 @@ that defines them is selected.
 [psyncv2] hipri		Set RWF_HIPRI on IO, indicating to the kernel that
 			it's of higher priority than normal.
 
-[cpu] cpuload=int Attempt to use the specified percentage of CPU cycles.
+[cpuio] cpuload=int Attempt to use the specified percentage of CPU cycles.
 
-[cpu] cpuchunks=int Split the load into cycles of the given time. In
+[cpuio] cpuchunks=int Split the load into cycles of the given time. In
 		microseconds.
 
-[cpu] exit_on_io_done=bool Detect when IO threads are done, then exit.
+[cpuio] exit_on_io_done=bool Detect when IO threads are done, then exit.
 
 [netsplice] hostname=str
 [net] hostname=str The host name or IP address to use for TCP or UDP based IO.

@@ -329,7 +329,7 @@ static int char_size(struct thread_data *td, struct fio_file *f)
 	int r;
 
 	if (td->io_ops->open_file(td, f)) {
-		log_err("fio: failed opening blockdev %s for size check\n",
+		log_err("fio: failed opening chardev %s for size check\n",
 			f->file_name);
 		return 1;
 	}
@@ -1225,10 +1225,12 @@ static void get_file_type(struct fio_file *f)
 	else
 		f->filetype = FIO_TYPE_FILE;
 
+#ifdef WIN32
 	/* \\.\ is the device namespace in Windows, where every file is
 	 * a block device */
 	if (strncmp(f->file_name, "\\\\.\\", 4) == 0)
 		f->filetype = FIO_TYPE_BD;
+#endif
 
 	if (!stat(f->file_name, &sb)) {
 		if (S_ISBLK(sb.st_mode))

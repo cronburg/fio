@@ -228,6 +228,12 @@ struct thread_data {
 	struct ioengine_ops *io_ops;
 
 	/*
+	 * IO engine private data and dlhandle.
+	 */
+	void *io_ops_data;
+	void *io_ops_dlhandle;
+
+	/*
 	 * Queue depth of io_u's that fio MIGHT do
 	 */
 	unsigned int cur_depth;
@@ -503,6 +509,7 @@ extern void fio_options_dup_and_init(struct option *);
 extern void fio_options_mem_dupe(struct thread_data *);
 extern void options_mem_dupe(void *data, struct fio_option *options);
 extern void td_fill_rand_seeds(struct thread_data *);
+extern void td_fill_verify_state_seed(struct thread_data *);
 extern void add_job_opts(const char **, int);
 extern char *num2str(uint64_t, int, int, int, int);
 extern int ioengine_load(struct thread_data *);
