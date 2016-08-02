@@ -16,7 +16,7 @@ import numpy as np
 from fiologparser_numpy import weights, columns, weighted_percentile \
                             , weighted_average, percs, fmt_float_list
 
-__HIST_COLUMNS = 1536
+__HIST_COLUMNS = 1216
 __NON_HIST_COLUMNS = 3
 __TOTAL_COLUMNS = __HIST_COLUMNS + __NON_HIST_COLUMNS
     

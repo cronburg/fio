@@ -108,7 +108,7 @@ struct group_run_stats {
 
 #define FIO_IO_U_PLAT_BITS 6
 #define FIO_IO_U_PLAT_VAL (1 << FIO_IO_U_PLAT_BITS)
-#define FIO_IO_U_PLAT_GROUP_NR 24
+#define FIO_IO_U_PLAT_GROUP_NR 19
 #define FIO_IO_U_PLAT_NR (FIO_IO_U_PLAT_GROUP_NR * FIO_IO_U_PLAT_VAL)
 #define FIO_IO_U_LIST_MAX_LEN 20 /* The size of the default and user-specified
 					list of percentiles */
