@@ -121,6 +121,9 @@ def weights(start_ts, end_ts, start, end):
     ws[np.where(np.isnan(ws))] = 0.0;
     return ws
 
+def weighted_average(vs, ws):
+    return np.sum(vs * ws) / np.sum(ws)
+
 columns = ["end-time", "samples", "min", "avg", "median", "90%", "95%", "99%", "max"]
 percs   = [50, 90, 95, 99]
 
@@ -134,7 +137,7 @@ def fmt_float_list(ctx, num=1):
 
 def print_sums(ctx, vs, ws, ss, end, divisor=1.0):
     fmt = "%d, " + fmt_float_list(ctx, 1)
-    print (fmt % (end, np.sum(vs * ws) / divisor / ctx.divisor))
+    print (fmt % (end, weighted_average(vs, ws) / divisor / ctx.divisor))
 
 def print_averages(ctx, vs, ws, ss, end):
     print_sums(ctx, vs, ws, ss, end, divisor=float(len(vs)))
@@ -155,7 +158,7 @@ def print_full(ctx, vs, ws, ss, end):
 def print_all_stats(ctx, vs, ws, ss_cnt, end):
     ps = weighted_percentile(percs, vs, ws)
 
-    values = [np.min(vs), sum(vs * ws) / sum(ws)] + list(ps) + [np.max(vs)]
+    values = [np.min(vs), weighted_average(vs, ws)] + list(ps) + [np.max(vs)]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
     print (fmt % tuple(row))

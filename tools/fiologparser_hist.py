@@ -13,7 +13,8 @@
 import sys
 import pandas
 import numpy as np
-from fiologparser_numpy import weights, columns, weighted_percentile, percs, fmt_float_list
+from fiologparser_numpy import weights, columns, weighted_percentile \
+                            , weighted_average, percs, fmt_float_list
 
 __HIST_COLUMNS = 1216
 __NON_HIST_COLUMNS = 3
@@ -119,7 +120,7 @@ def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
 def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
     ps = weighted_percentile(percs, vs, ws)
 
-    avg = np.sum(vs * ws) / ss_cnt
+    avg = weighted_average(vs, ws)
     values = [mn, avg] + list(ps) + [mx]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
@@ -213,7 +214,7 @@ if __name__ == '__main__':
        , help='number of samples to buffer into numpy at a time'
        )
     arg( '--max_latency'
-       , default=300
+       , default=20
        , type=float
        , help='number of seconds of data to process at a time'
        )
