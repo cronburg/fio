@@ -16,7 +16,7 @@ import numpy as np
 from fiologparser_numpy import weights, columns, weighted_percentile \
                             , weighted_average, percs, fmt_float_list
 
-__HIST_COLUMNS = 1216
+__HIST_COLUMNS = 1536
 __NON_HIST_COLUMNS = 3
 __TOTAL_COLUMNS = __HIST_COLUMNS + __NON_HIST_COLUMNS
     
@@ -174,7 +174,7 @@ def main(ctx):
 
     try:
         start, end = 0, ctx.interval
-        arr = np.empty(shape=(0,1218))
+        arr = np.empty(shape=(0,__TOTAL_COLUMNS - 1))
         more_data = True
         while more_data or len(arr) > 0:
             
@@ -185,7 +185,7 @@ def main(ctx):
                 except StopIteration:
                     more_data = False
                     break
-                arr = np.append(arr, new_arr.reshape((1,1218)), axis=0)
+                arr = np.append(arr, new_arr.reshape((1,__TOTAL_COLUMNS - 1)), axis=0)
             arr = arr.astype(int)
             
             if arr.size > 0:
