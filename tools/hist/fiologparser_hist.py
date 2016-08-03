@@ -7,6 +7,10 @@
     Example usage:
     
         $ fiologparser-hist.py *_clat_hist*
+        end-time, samples, min, avg, median, 90%, 95%, 99%, max
+        1000, 15, 192.000, 1678.107, 1788.859, 1856.076, 1880.040, 1899.208, 1888.000
+        2000, 43, 152.000, 1642.368, 1714.099, 1816.659, 1845.552, 1888.131, 1888.000
+        ...
 
     @author Karl Cronburg <karl.cronburg@gmail.com>
 """
@@ -100,7 +104,7 @@ def histogram_generator(ctx, fps, sz):
         if arrs[fp][0].shape[0] == 0:
             arrs[fp] = read_chunk(head_rows[fp], rdrs[fp], sz)
 
-def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
+def plat_idx_to_val(idx, edge=0.5, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
     """ Taken from fio's stat.c for calculating the latency value of a bin
         from that bin's index. """
 
@@ -116,16 +120,18 @@ def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
     # Find its bucket number of the group
     k = idx % FIO_IO_U_PLAT_VAL
 
-    # Return the mean of the range of the bucket
-    return base + ((k + 0.5) * (1 << error_bits))
+    # Return the mean (if edge=0.5) of the range of the bucket
+    return base + ((k + edge) * (1 << error_bits))
     
-def plat_idx_to_val_coarse(idx, coarseness):
+def plat_idx_to_val_coarse(idx, coarseness, edge=0.5):
     # Multiply the index by the power of 2 coarseness to get the bin
     # bin index with a max of 1536 bins (FIO_IO_U_PLAT_GROUP_NR = 24 in stat.h)
     stride = 1 << coarseness
     idx = idx * stride
-    return np.average([plat_idx_to_val(idx), plat_idx_to_val(idx + stride)])
-    
+    lower = plat_idx_to_val(idx, edge=edge)
+    upper = plat_idx_to_val(idx + stride, edge=edge)
+    return lower + (upper - lower) * edge
+
 def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
     ps = weighted_percentile(percs, vs, ws)
 
@@ -140,8 +146,10 @@ def update_extreme(val, fncn, new_val):
     if val is None: return new_val
     else: return fncn(val, new_val)
 
-# See beginning of main() for how bin_vals is computed
+# See beginning of main() for how bin_vals are computed
 bin_vals = []
+lower_bin_vals = [] # lower edge of each bin
+upper_bin_vals = [] # upper edge of each bin 
 
 def process_interval(ctx, samples, iStart, iEnd):
     """ Construct the weighted histogram for the given interval by scanning
@@ -160,7 +168,7 @@ def process_interval(ctx, samples, iStart, iEnd):
         # started before the end of the current time interval [start,end]
         start_times = (end_time - 0.5 * ctx.interval) - bin_vals / 1000.0
         idx = np.where(start_times < iEnd)
-        s_ts, bvs, hs = start_times[idx], bin_vals[idx], hist[idx]
+        s_ts, l_bvs, u_bvs, hs = start_times[idx], lower_bin_vals[idx], upper_bin_vals[idx], hist[idx]
 
         # Increment current interval histogram by weighted values of future histogram:
         ws = hs * weights(s_ts, end_time, iStart, iEnd)
@@ -172,8 +180,8 @@ def process_interval(ctx, samples, iStart, iEnd):
         # Update min and max bin values seen if necessary:
         idx = np.where(hs != 0)[0]
         if idx.size > 0:
-            mn_bin_val = update_extreme(mn_bin_val, min, bvs[idx][0])
-            mx_bin_val = update_extreme(mx_bin_val, max, bvs[idx][-1])
+            mn_bin_val = update_extreme(mn_bin_val, min, l_bvs[idx][0])
+            mx_bin_val = update_extreme(mx_bin_val, max, u_bvs[idx][-1])
 
     if ss_cnt > 0: print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
 
@@ -183,7 +191,7 @@ def main(ctx):
     # calculate the corresponding 'coarseness' parameter used to generate
     # those files, and calculate the appropriate bin latency values:
     with open(ctx.FILE[0], 'r') as fp:
-        global bin_vals,__HIST_COLUMNS,__TOTAL_COLUMNS
+        global bin_vals,lower_bin_vals,upper_bin_vals,__HIST_COLUMNS,__TOTAL_COLUMNS
         fp.readline()
         __TOTAL_COLUMNS = len(fp.readline().split(', '))
         __HIST_COLUMNS = __TOTAL_COLUMNS - __NON_HIST_COLUMNS
@@ -192,6 +200,8 @@ def main(ctx):
         else: max_cols = 1536.0
         coarseness = int(np.log2(max_cols / __HIST_COLUMNS))
         bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness), np.arange(__HIST_COLUMNS)), dtype=float)
+        lower_bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness, 0.0), np.arange(__HIST_COLUMNS)), dtype=float)
+        upper_bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness, 1.0), np.arange(__HIST_COLUMNS)), dtype=float)
 
     fps = [open(f, 'r') for f in ctx.FILE]
     gen = histogram_generator(ctx, fps, ctx.buff_size)
