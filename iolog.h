@@ -115,6 +115,7 @@ struct io_log {
    */
 	struct io_hist hist_window[DDIR_RWDIR_CNT];
 	unsigned long hist_msec;
+	int hist_coarseness;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
@@ -232,6 +233,7 @@ struct log_params {
 	struct thread_data *td;
 	unsigned long avg_msec;
 	unsigned long hist_msec;
+	int hist_coarseness;
 	int log_type;
 	int log_offset;
 	int log_gz;

@@ -129,6 +129,7 @@ struct thread_options {
 	unsigned int dep_use_os_rand;
 	unsigned int log_avg_msec;
 	unsigned int log_hist_msec;
+  unsigned int log_hist_coarseness;
 	unsigned int log_max;
 	unsigned int log_offset;
 	unsigned int log_gz;
@@ -385,6 +386,7 @@ struct thread_options_pack {
 	uint32_t dep_use_os_rand;
 	uint32_t log_avg_msec;
 	uint32_t log_hist_msec;
+  uint32_t log_hist_coarseness;
 	uint32_t log_max;
 	uint32_t log_offset;
 	uint32_t log_gz;
@@ -394,7 +396,7 @@ struct thread_options_pack {
 	uint32_t bs_unaligned;
 	uint32_t fsync_on_close;
 	uint32_t bs_is_seq_rand;
-	//uint32_t pad1;
+	uint32_t pad1;
 
 	uint32_t random_distribution;
 	uint32_t exitall_error;
