@@ -1419,6 +1419,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_LAT,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1449,6 +1450,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_HIST,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1471,6 +1473,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_BW,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1484,6 +1487,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			o->bw_avg_time = p.avg_msec;
 	
 		p.hist_msec = o->log_hist_msec;
+		p.hist_coarseness = o->log_hist_coarseness;
 
 		if (p.log_gz_store)
 			suf = "log.fz";
@@ -1499,6 +1503,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_IOPS,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1512,6 +1517,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			o->iops_avg_time = p.avg_msec;
 	
 		p.hist_msec = o->log_hist_msec;
+		p.hist_coarseness = o->log_hist_coarseness;
 
 		if (p.log_gz_store)
 			suf = "log.fz";

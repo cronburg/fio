@@ -585,6 +585,7 @@ void setup_log(struct io_log **log, struct log_params *p,
 	l->log_gz_store = p->log_gz_store;
 	l->avg_msec = p->avg_msec;
 	l->hist_msec = p->hist_msec;
+	l->hist_coarseness = p->hist_coarseness;
 	l->filename = strdup(filename);
 	l->td = p->td;
 
@@ -660,12 +661,23 @@ void free_log(struct io_log *log)
 	sfree(log);
 }
 
-void flush_hist_samples(FILE *f, void *samples, uint64_t sample_size)
+static inline int hist_sum(int j, int stride, unsigned int* io_u_plat) {
+	int sum = 0;
+	for (int k = 0; k < stride; k++) {
+		sum += io_u_plat[j + k];
+	}
+	return sum;
+}
+
+void flush_hist_samples(FILE *f, int hist_coarseness, void *samples
+	, uint64_t sample_size)
 {
 	struct io_sample *s;
 	int log_offset;
 	uint64_t i, j, nr_samples;
 	unsigned int* io_u_plat;
+
+	int stride = 1 << hist_coarseness;
 	
 	if (!sample_size)
 		return;
@@ -679,11 +691,12 @@ void flush_hist_samples(FILE *f, void *samples, uint64_t sample_size)
 		s = __get_sample(samples, log_offset, i);
 		io_u_plat = (unsigned int*)(s->val);
 		fprintf(f, "%lu, %u, %u, ", (unsigned long)s->time
-						, io_sample_ddir(s), s->bs);
-		for (j = 0; j < FIO_IO_U_PLAT_NR - 1; j++) {
-			fprintf(f, "%lu, ", (unsigned long) io_u_plat[j]); 
+		       , io_sample_ddir(s), s->bs);
+		for (j = 0; j < FIO_IO_U_PLAT_NR - stride; j += stride) {
+			fprintf(f, "%lu, ", (unsigned long) hist_sum(j, stride, io_u_plat)); 
 		}
-		fprintf(f, "%lu\n", (unsigned long) io_u_plat[FIO_IO_U_PLAT_NR - 1]);
+		fprintf(f, "%lu\n", (unsigned long) 
+		        hist_sum(FIO_IO_U_PLAT_NR - stride, stride, io_u_plat));
 		sfree(io_u_plat);
 	}
 }
@@ -1019,7 +1032,8 @@ void flush_log(struct io_log *log, bool do_append)
 		flist_del_init(&cur_log->list);
 		
 		if (log == log->td->clat_hist_log)
-			flush_hist_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
+			flush_hist_samples(f, log->hist_coarseness
+			    , cur_log->log, cur_log->nr_samples * log_entry_sz(log));
 		else
 			flush_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
 		

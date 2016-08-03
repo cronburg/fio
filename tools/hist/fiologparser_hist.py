@@ -16,6 +16,8 @@ import numpy as np
 from fiologparser_numpy import weights, columns, weighted_percentile \
                             , weighted_average, percs, fmt_float_list
 
+# Default values - see beginning of main() for how we detect number columns in
+# the input files:
 __HIST_COLUMNS = 1216
 __NON_HIST_COLUMNS = 3
 __TOTAL_COLUMNS = __HIST_COLUMNS + __NON_HIST_COLUMNS
@@ -117,6 +119,13 @@ def plat_idx_to_val(idx, FIO_IO_U_PLAT_BITS=6, FIO_IO_U_PLAT_VAL=64):
     # Return the mean of the range of the bucket
     return base + ((k + 0.5) * (1 << error_bits))
     
+def plat_idx_to_val_coarse(idx, coarseness):
+    # Multiply the index by the power of 2 coarseness to get the bin
+    # bin index with a max of 1536 bins (FIO_IO_U_PLAT_GROUP_NR = 24 in stat.h)
+    stride = 1 << coarseness
+    idx = idx * stride
+    return np.average([plat_idx_to_val(idx), plat_idx_to_val(idx + stride)])
+    
 def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
     ps = weighted_percentile(percs, vs, ws)
 
@@ -131,7 +140,9 @@ def update_extreme(val, fncn, new_val):
     if val is None: return new_val
     else: return fncn(val, new_val)
 
-bin_vals = np.array(map(plat_idx_to_val, np.arange(__HIST_COLUMNS)), dtype=float)
+# See beginning of main() for how bin_vals is computed
+bin_vals = []
+
 def process_interval(ctx, samples, iStart, iEnd):
     """ Construct the weighted histogram for the given interval by scanning
         through all the histograms and figuring out which of their bins have
@@ -167,6 +178,21 @@ def process_interval(ctx, samples, iStart, iEnd):
     if ss_cnt > 0: print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
 
 def main(ctx):
+
+    # Automatically detect how many columns are in the input files,
+    # calculate the corresponding 'coarseness' parameter used to generate
+    # those files, and calculate the appropriate bin latency values:
+    with open(ctx.FILE[0], 'r') as fp:
+        global bin_vals,__HIST_COLUMNS,__TOTAL_COLUMNS
+        fp.readline()
+        __TOTAL_COLUMNS = len(fp.readline().split(', '))
+        __HIST_COLUMNS = __TOTAL_COLUMNS - __NON_HIST_COLUMNS
+        # TODO: FIO_IO_U_PLAT_GROUP_NR should be used to determine max_cols
+        if __HIST_COLUMNS % 1216 == 0: max_cols = 1216.0
+        else: max_cols = 1536.0
+        coarseness = int(np.log2(max_cols / __HIST_COLUMNS))
+        bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness), np.arange(__HIST_COLUMNS)), dtype=float)
+
     fps = [open(f, 'r') for f in ctx.FILE]
     gen = histogram_generator(ctx, fps, ctx.buff_size)
 
