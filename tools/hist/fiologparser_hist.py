@@ -300,7 +300,7 @@ def process_interval(ctx, samples, iStart, iEnd):
     """ Construct the weighted histogram for the given interval by scanning
         through all the histograms and figuring out which of their bins have
         samples with latencies which overlap with the given interval
-	[iStart,iEnd].
+        [iStart,iEnd].
     """
     
     times, files, hists = samples[:,0], samples[:,1], samples[:,2:]
@@ -331,6 +331,30 @@ def process_interval(ctx, samples, iStart, iEnd):
 
     if ss_cnt > 0: print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
 
+def guess_max_from_bins(ctx, hist_cols):
+    """ Try to guess the GROUP_NR from given # of histogram
+        columns seen in an input file """
+    max_coarse = 8
+    bins = [1216,1280,1344,1408,1472,1536,1600,1664]
+    coarses = range(max_coarse + 1)
+    fncn = lambda z: list(map(lambda x: z/2**x if z % 2**x == 0 else -10, coarses))
+    
+    arr = np.transpose(list(map(fncn, bins)))
+    idx = np.where(arr == hist_cols)
+    if len(idx[1]) == 0:
+        table = repr(arr.astype(int)).replace('-10', 'N/A').replace('array','     ')
+        err("Unable to determine bin values from input clat_hist files. Namely \n"
+            "the first line of file '%s' " % ctx.FILE[0] + "has %d \n" % (__TOTAL_COLUMNS,) +
+            "columns of which we assume %d " % (hist_cols,) + "correspond to histogram bins. \n"
+            "This number needs to be equal to one of the following numbers:\n\n"
+            + table + "\n\n"
+            "Possible reasons and corresponding solutions:\n"
+            "  - Input file(s) does not contain histograms.\n"
+            "  - You recompiled fio with a different GROUP_NR. If so please specify this\n"
+            "    new GROUP_NR on the command line with --group_nr\n")
+        exit(1)
+    return bins[idx[1]]
+
 def main(ctx):
 
     # Automatically detect how many columns are in the input files,
@@ -340,21 +364,9 @@ def main(ctx):
         global bin_vals,lower_bin_vals,upper_bin_vals,__HIST_COLUMNS,__TOTAL_COLUMNS
         __TOTAL_COLUMNS = len(fp.readline().split(','))
         __HIST_COLUMNS = __TOTAL_COLUMNS - __NON_HIST_COLUMNS
-        if   ctx.group_nr == 19 and 1216 % __HIST_COLUMNS == 0: max_cols = 1216.0
-        elif ctx.group_nr != 19: max_cols = ctx.group
-        elif __HIST_COLUMNS % 1536 == 0: max_cols = 1536.0
-        else:
-            err("Unable to determine bin values from input clat_hist files. Namely "
-                "the first line of file '%s' " % ctx.FILE[0] + "has %d " % (__TOTAL_COLUMNS,) +
-                "columns of which we assume %d " % (__HIST_COLUMNS,) + "correspond to histogram bins. "
-                "This number needs to be equal to 1216 or 1536, or to be a power of 2-based "
-                "divisor of these numbers (as a result of pre-processing with half-bins.py). "
-                "Possible reasons and corresponding solutions:\n"
-                "  - Input file(s) does not contain histograms.\n"
-                "  - You recompiled fio with a different GROUP_NR. If so please specify this\n"
-                "    new GROUP_NR on the command line with --group_nr\n")
-            exit(1)
-        coarseness = int(np.log2(max_cols / __HIST_COLUMNS))
+
+        max_cols = guess_max_from_bins(ctx, __HIST_COLUMNS)
+        coarseness = int(np.log2(float(max_cols) / __HIST_COLUMNS))
         bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness), np.arange(__HIST_COLUMNS)), dtype=float)
         lower_bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness, 0.0), np.arange(__HIST_COLUMNS)), dtype=float)
         upper_bin_vals = np.array(map(lambda x: plat_idx_to_val_coarse(x, coarseness, 1.0), np.arange(__HIST_COLUMNS)), dtype=float)
