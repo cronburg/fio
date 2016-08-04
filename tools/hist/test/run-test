@@ -1,0 +1,16 @@
+#!/bin/bash
+
+test() {
+  ../fiologparser_numpy.py -A -lat -i 100 $1 > $1.out
+  diff $1.exp $1.out
+  if [ $? -eq 0 ]; then
+    echo "$1: Success"
+  else
+    echo "$1: Failure. See above."
+  fi
+}
+
+test t0
+test t1
+test t2
+
