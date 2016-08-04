@@ -258,7 +258,7 @@ static int str2error(char *str)
 			    "EINVAL", "ENFILE", "EMFILE", "ENOTTY",
 			    "ETXTBSY","EFBIG", "ENOSPC", "ESPIPE",
 			    "EROFS","EMLINK", "EPIPE", "EDOM", "ERANGE" };
-	int i = 0, num = sizeof(err) / sizeof(void *);
+	int i = 0, num = sizeof(err) / sizeof(char *);
 
 	while (i < num) {
 		if (!strcmp(err[i], str))
@@ -3012,20 +3012,8 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 		.type	= FIO_OPT_INT,
 		.off1	= td_var_offset(ioprio),
 		.help	= "Set job IO priority value",
-		.minval	= 0,
-		.maxval	= 7,
-		.interval = 1,
-		.category = FIO_OPT_C_GENERAL,
-		.group	= FIO_OPT_G_CRED,
-	},
-	{
-		.name	= "prioclass",
-		.lname	= "I/O nice priority class",
-		.type	= FIO_OPT_INT,
-		.off1	= td_var_offset(ioprio_class),
-		.help	= "Set job IO priority class",
-		.minval	= 0,
-		.maxval	= 3,
+		.minval	= IOPRIO_MIN_PRIO,
+		.maxval	= IOPRIO_MAX_PRIO,
 		.interval = 1,
 		.category = FIO_OPT_C_GENERAL,
 		.group	= FIO_OPT_G_CRED,
@@ -3037,11 +3025,29 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 		.type	= FIO_OPT_UNSUPPORTED,
 		.help	= "Your platform does not support IO priorities",
 	},
+#endif
+#ifdef FIO_HAVE_IOPRIO_CLASS
+#ifndef FIO_HAVE_IOPRIO
+#error "FIO_HAVE_IOPRIO_CLASS requires FIO_HAVE_IOPRIO"
+#endif
+	{
+		.name	= "prioclass",
+		.lname	= "I/O nice priority class",
+		.type	= FIO_OPT_INT,
+		.off1	= td_var_offset(ioprio_class),
+		.help	= "Set job IO priority class",
+		.minval	= IOPRIO_MIN_PRIO_CLASS,
+		.maxval	= IOPRIO_MAX_PRIO_CLASS,
+		.interval = 1,
+		.category = FIO_OPT_C_GENERAL,
+		.group	= FIO_OPT_G_CRED,
+	},
+#else
 	{
 		.name	= "prioclass",
 		.lname	= "I/O nice priority class",
 		.type	= FIO_OPT_UNSUPPORTED,
-		.help	= "Your platform does not support IO priorities",
+		.help	= "Your platform does not support IO priority classes",
 	},
 #endif
 	{
@@ -3438,8 +3444,8 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 	{
 		.name	= "exitall_on_error",
 		.lname	= "Exit-all on terminate in error",
-		.type	= FIO_OPT_BOOL,
-		.off1	= td_var_offset(unlink),
+		.type	= FIO_OPT_STR_SET,
+		.off1	= td_var_offset(exitall_error),
 		.help	= "Terminate all jobs when one exits in error",
 		.category = FIO_OPT_C_GENERAL,
 		.group	= FIO_OPT_G_PROCESS,
@@ -3523,25 +3529,37 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 		.category = FIO_OPT_C_LOG,
 		.group	= FIO_OPT_G_INVALID,
 	},
-  {
-    .name = "log_hist_msec",
-    .lname = "Log histograms (msec)",
-    .type = FIO_OPT_INT,
-    .off1 = td_var_offset(log_hist_msec),
-    .help = "Dump bw/iops/lat histograms at frequency of this time value",
-    .def  = "0",
-    .category = FIO_OPT_C_LOG,
-    .group = FIO_OPT_G_INVALID,
-  },
-  {
-    .name = "write_hist_log",
-    .lname = "Write latency histogram logs",
-    .type = FIO_OPT_STR_STORE,
-    .off1 = td_var_offset(hist_log_file),
-    .help = "Write log of latency histograms during run",
-    .category = FIO_OPT_C_LOG,
-    .group = FIO_OPT_G_INVALID,
-  },
+	{
+		.name = "log_hist_msec",
+		.lname = "Log histograms (msec)",
+		.type = FIO_OPT_INT,
+		.off1 = td_var_offset(log_hist_msec),
+		.help = "Dump bw/iops/lat histograms at frequency of this time value",
+		.def  = "0",
+		.category = FIO_OPT_C_LOG,
+		.group = FIO_OPT_G_INVALID,
+	},
+	{
+		.name = "log_hist_coarseness",
+		.lname = "Log histograms (msec)",
+		.type = FIO_OPT_INT,
+		.off1 = td_var_offset(log_hist_coarseness),
+		.help = "Integer in range [0,6]. Higher coarseness outputs"
+		        " fewer histogram bins per sample. The number of bins for"
+		        " these are [1216, 608, 304, 152, 76, 38, 19] respectively.",
+		.def  = "0",
+		.category = FIO_OPT_C_LOG,
+		.group = FIO_OPT_G_INVALID,
+	},
+	{
+		.name = "write_hist_log",
+		.lname = "Write latency histogram logs",
+		.type = FIO_OPT_STR_STORE,
+		.off1 = td_var_offset(hist_log_file),
+		.help = "Write log of latency histograms during run",
+		.category = FIO_OPT_C_LOG,
+		.group = FIO_OPT_G_INVALID,
+	},
 	{
 		.name	= "log_max_value",
 		.lname	= "Log maximum instead of average",

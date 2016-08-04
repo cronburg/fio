@@ -22,6 +22,8 @@ land, lor, lnot = np.logical_and, np.logical_or, np.logical_not
 from itertools import islice
 import argparse
 import os
+from fiologparser_hist import weights, columns, weighted_percentile \
+    , debug, err, weighted_average, percs, fmt_float_list
 
 try:
     import pandas
@@ -36,7 +38,6 @@ except ImportError:
         fio_generator.pyx file. Skip cythonizing by putting code directly here too: """
 
     import re
-    err = sys.stderr.write
     row_re = re.compile("^\d+,\s\d+,\s\d+,\s\d+\s+$")
 
     def next_no_stop_iter(fp):
@@ -76,65 +77,9 @@ except ImportError:
             yield (lines[fp].rstrip() + ", " + str(fps.index(fp)) + '\n')
             lines[fp] = next_no_stop_iter(fp) # read a new line into our dictionary
 
-debug = not (os.getenv("DEBUG") is None)
-err = sys.stderr.write
-
-def weighted_percentile(percs, vs, ws):
-    """ Use linear interpolation to calculate the weighted percentile.
-        
-        Value and weight arrays are first sorted by value. The cumulative
-        distribution function (cdf) is then computed, after which np.interp
-        finds the two values closest to our desired weighted percentile(s)
-        and linearly interpolates them.
-        
-        percs  :: List of percentiles we want to calculate
-        vs     :: Array of values we are computing the percentile of
-        ws     :: Array of weights for our corresponding values
-        return :: Array of percentiles
-    """
-    idx = np.argsort(vs)
-    vs, ws = vs[idx], ws[idx] # weights and values sorted by value
-    cdf = 100 * (ws.cumsum() - ws / 2.0) / ws.sum()
-    return np.interp(percs, cdf, vs) # linear interpolation
-
-def weights(start_ts, end_ts, start, end):
-    """ Calculate weights based on fraction of sample falling in the
-        given interval [start,end]. Weights computed using vector / array
-        computation instead of for-loops.
-    
-        Note that samples with zero time length are effectively ignored
-        (we set their weight to zero). TODO: print warning always?
-
-        start_ts :: Array of start times for a set of samples
-        end_ts   :: Array of end times for a set of samples
-        start    :: int
-        end      :: int
-        return   :: Array of weights
-    """
-    sbounds = np.maximum(start_ts, start).astype(float)
-    ebounds = np.minimum(end_ts,   end).astype(float)
-    ws = (ebounds - sbounds) / (end_ts - start_ts)
-    if debug and np.any(np.isnan(ws)):
-      err("WARNING: zero-length sample(s) detected. Possible culprits:\n")
-      err("  1) Using -bw when you should be using -lat.\n")
-      err("  2) Log file has bad or corrupt time values.\n")
-    ws[np.where(np.isnan(ws))] = 0.0;
-    return ws
-
-columns = ["end-time", "samples", "min", "avg", "median", "90%", "95%", "99%", "max"]
-percs   = [50, 90, 95, 99]
-
-def fmt_float_list(ctx, num=1):
-  """ Return a comma separated list of float formatters to the required number
-      of decimal places. For instance:
-
-        fmt_float_list(ctx.decimals=4, num=3) == "%.4f, %.4f, %.4f"
-  """
-  return ', '.join(["%%.%df" % ctx.decimals] * num)
-
 def print_sums(ctx, vs, ws, ss, end, divisor=1.0):
     fmt = "%d, " + fmt_float_list(ctx, 1)
-    print (fmt % (end, np.sum(vs * ws) / divisor / ctx.divisor))
+    print (fmt % (end, weighted_average(vs, ws) / divisor / ctx.divisor))
 
 def print_averages(ctx, vs, ws, ss, end):
     print_sums(ctx, vs, ws, ss, end, divisor=float(len(vs)))
@@ -155,7 +100,7 @@ def print_full(ctx, vs, ws, ss, end):
 def print_all_stats(ctx, vs, ws, ss_cnt, end):
     ps = weighted_percentile(percs, vs, ws)
 
-    values = [np.min(vs), sum(vs * ws) / sum(ws)] + list(ps) + [np.max(vs)]
+    values = [np.min(vs), weighted_average(vs, ws)] + list(ps) + [np.max(vs)]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
     fmt = "%d, %d, " + fmt_float_list(ctx, 7)
     print (fmt % tuple(row))

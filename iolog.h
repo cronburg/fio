@@ -115,6 +115,7 @@ struct io_log {
    */
 	struct io_hist hist_window[DDIR_RWDIR_CNT];
 	unsigned long hist_msec;
+	int hist_coarseness;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
@@ -232,6 +233,7 @@ struct log_params {
 	struct thread_data *td;
 	unsigned long avg_msec;
 	unsigned long hist_msec;
+	int hist_coarseness;
 	int log_type;
 	int log_offset;
 	int log_gz;
@@ -244,9 +246,16 @@ static inline bool per_unit_log(struct io_log *log)
 	return log && !log->avg_msec;
 }
 
+static inline bool inline_log(struct io_log *log)
+{
+	return log->log_type == IO_LOG_TYPE_LAT ||
+		log->log_type == IO_LOG_TYPE_CLAT ||
+		log->log_type == IO_LOG_TYPE_SLAT;
+}
+
 extern void finalize_logs(struct thread_data *td, bool);
 extern void setup_log(struct io_log **, struct log_params *, const char *);
-extern void flush_log(struct io_log *, int);
+extern void flush_log(struct io_log *, bool);
 extern void flush_samples(FILE *, void *, uint64_t);
 extern void free_log(struct io_log *);
 extern void fio_writeout_logs(bool);

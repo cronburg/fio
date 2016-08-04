@@ -47,6 +47,7 @@ unsigned long arch_flags = 0;
 uintptr_t page_mask = 0;
 uintptr_t page_size = 0;
 
+/* see os/os.h */
 static const char *fio_os_strings[os_nr] = {
 	"Invalid",
 	"Linux",
@@ -62,6 +63,7 @@ static const char *fio_os_strings[os_nr] = {
 	"DragonFly",
 };
 
+/* see arch/arch.h */
 static const char *fio_arch_strings[arch_nr] = {
 	"Invalid",
 	"x86-64",
@@ -75,6 +77,8 @@ static const char *fio_arch_strings[arch_nr] = {
 	"arm",
 	"sh",
 	"hppa",
+	"mips",
+	"aarch64",
 	"generic"
 };
 
@@ -274,14 +278,18 @@ int fio_running_or_pending_io_threads(void)
 {
 	struct thread_data *td;
 	int i;
+	int nr_io_threads = 0;
 
 	for_each_td(td, i) {
 		if (td->flags & TD_F_NOIO)
 			continue;
+		nr_io_threads++;
 		if (td->runstate < TD_EXITED)
 			return 1;
 	}
 
+	if (!nr_io_threads)
+		return -1; /* we only had cpuio threads to begin with */
 	return 0;
 }
 

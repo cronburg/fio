@@ -603,6 +603,15 @@ static void do_verify(struct thread_data *td, uint64_t verify_bytes)
 	if (td->error)
 		return;
 
+	/*
+	 * verify_state needs to be reset before verification
+	 * proceeds so that expected random seeds match actual
+	 * random seeds in headers. The main loop will reset
+	 * all random number generators if randrepeat is set.
+	 */
+	if (!td->o.rand_repeatable)
+		td_fill_verify_state_seed(td);
+
 	td_set_runstate(td, TD_VERIFYING);
 
 	io_u = NULL;
@@ -643,7 +652,7 @@ static void do_verify(struct thread_data *td, uint64_t verify_bytes)
 				break;
 
 			while ((io_u = get_io_u(td)) != NULL) {
-				if (IS_ERR(io_u)) {
+				if (IS_ERR_OR_NULL(io_u)) {
 					io_u = NULL;
 					ret = FIO_Q_BUSY;
 					goto reap;
@@ -1252,6 +1261,7 @@ static int init_io_u(struct thread_data *td)
 
 static int switch_ioscheduler(struct thread_data *td)
 {
+#ifdef FIO_HAVE_IOSCHED_SWITCH
 	char tmp[256], tmp2[128];
 	FILE *f;
 	int ret;
@@ -1310,6 +1320,9 @@ static int switch_ioscheduler(struct thread_data *td)
 
 	fclose(f);
 	return 0;
+#else
+	return 0;
+#endif
 }
 
 static bool keep_running(struct thread_data *td)
@@ -1386,7 +1399,7 @@ static uint64_t do_dry_run(struct thread_data *td)
 			break;
 
 		io_u = get_io_u(td);
-		if (!io_u)
+		if (IS_ERR_OR_NULL(io_u))
 			break;
 
 		io_u_set(io_u, IO_U_F_FLIGHT);
@@ -1799,39 +1812,6 @@ err:
 	return (void *) (uintptr_t) td->error;
 }
 
-
-/*
- * We cannot pass the td data into a forked process, so attach the td and
- * pass it to the thread worker.
- */
-static int fork_main(struct sk_out *sk_out, int shmid, int offset)
-{
-	struct fork_data *fd;
-	void *data, *ret;
-
-#if !defined(__hpux) && !defined(CONFIG_NO_SHM)
-	data = shmat(shmid, NULL, 0);
-	if (data == (void *) -1) {
-		int __err = errno;
-
-		perror("shmat");
-		return __err;
-	}
-#else
-	/*
-	 * HP-UX inherits shm mappings?
-	 */
-	data = threads;
-#endif
-
-	fd = calloc(1, sizeof(*fd));
-	fd->td = data + offset * sizeof(struct thread_data);
-	fd->sk_out = sk_out;
-	ret = thread_main(fd);
-	shmdt(data);
-	return (int) (uintptr_t) ret;
-}
-
 static void dump_td_info(struct thread_data *td)
 {
 	log_err("fio: job '%s' (state=%d) hasn't exited in %lu seconds, it "
@@ -2169,6 +2149,7 @@ reap:
 		struct thread_data *map[REAL_MAX_JOBS];
 		struct timeval this_start;
 		int this_jobs = 0, left;
+		struct fork_data *fd;
 
 		/*
 		 * create threads (TD_NOT_CREATED -> TD_CREATED)
@@ -2218,13 +2199,12 @@ reap:
 			map[this_jobs++] = td;
 			nr_started++;
 
-			if (td->o.use_thread) {
-				struct fork_data *fd;
-				int ret;
+			fd = calloc(1, sizeof(*fd));
+			fd->td = td;
+			fd->sk_out = sk_out;
 
-				fd = calloc(1, sizeof(*fd));
-				fd->td = td;
-				fd->sk_out = sk_out;
+			if (td->o.use_thread) {
+				int ret;
 
 				dprint(FD_PROCESS, "will pthread_create\n");
 				ret = pthread_create(&td->thread, NULL,
@@ -2245,8 +2225,9 @@ reap:
 				dprint(FD_PROCESS, "will fork\n");
 				pid = fork();
 				if (!pid) {
-					int ret = fork_main(sk_out, shm_id, i);
+					int ret;
 
+					ret = (int)(uintptr_t)thread_main(fd);
 					_exit(ret);
 				} else if (i == fio_debug_jobno)
 					*fio_debug_jobp = pid;
@@ -2388,7 +2369,7 @@ int fio_backend(struct sk_out *sk_out)
 			for (i = 0; i < DDIR_RWDIR_CNT; i++) {
 				struct io_log *log = agg_io_log[i];
 
-				flush_log(log, 0);
+				flush_log(log, false);
 				free_log(log);
 			}
 		}

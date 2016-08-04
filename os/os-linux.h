@@ -18,6 +18,7 @@
 #include <linux/major.h>
 #include <byteswap.h>
 
+#include "./os-linux-syscall.h"
 #include "binject.h"
 #include "../file.h"
 
@@ -25,6 +26,7 @@
 #define FIO_HAVE_DISK_UTIL
 #define FIO_HAVE_SGIO
 #define FIO_HAVE_IOPRIO
+#define FIO_HAVE_IOPRIO_CLASS
 #define FIO_HAVE_IOSCHED_SWITCH
 #define FIO_HAVE_ODIRECT
 #define FIO_HAVE_HUGETLB
@@ -95,6 +97,12 @@ enum {
 
 #define IOPRIO_BITS		16
 #define IOPRIO_CLASS_SHIFT	13
+
+#define IOPRIO_MIN_PRIO		0	/* highest priority */
+#define IOPRIO_MAX_PRIO		7	/* lowest priority */
+
+#define IOPRIO_MIN_PRIO_CLASS	0
+#define IOPRIO_MAX_PRIO_CLASS	3
 
 static inline int ioprio_set(int which, int who, int ioprio_class, int ioprio)
 {

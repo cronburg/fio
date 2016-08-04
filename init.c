@@ -860,7 +860,7 @@ static int fixup_options(struct thread_data *td)
 		td->loops = 1;
 
 	if (td->o.block_error_hist && td->o.nr_files != 1) {
-		log_err("fio: block error histogram only available with "
+		log_err("fio: block error histogram only available "
 			"with a single file per job, but %d files "
 			"provided\n", td->o.nr_files);
 		ret = 1;
@@ -904,17 +904,22 @@ static const char *get_engine_name(const char *str)
 	return p;
 }
 
-static int exists_and_not_file(const char *filename)
+static int exists_and_not_regfile(const char *filename)
 {
 	struct stat sb;
 
 	if (lstat(filename, &sb) == -1)
 		return 0;
 
+#ifndef WIN32 /* NOT Windows */
+	if (S_ISREG(sb.st_mode))
+		return 0;
+#else
 	/* \\.\ is the device namespace in Windows, where every file
 	 * is a device node */
 	if (S_ISREG(sb.st_mode) && strncmp(filename, "\\\\.\\", 4) != 0)
 		return 0;
+#endif
 
 	return 1;
 }
@@ -936,12 +941,25 @@ static void init_rand_file_service(struct thread_data *td)
 	}
 }
 
+void td_fill_verify_state_seed(struct thread_data *td)
+{
+	bool use64;
+
+	if (td->o.random_generator == FIO_RAND_GEN_TAUSWORTHE64)
+		use64 = 1;
+	else
+		use64 = 0;
+
+	init_rand_seed(&td->verify_state, td->rand_seeds[FIO_RAND_VER_OFF],
+		use64);
+}
+
 static void td_fill_rand_seeds_internal(struct thread_data *td, bool use64)
 {
 	int i;
 
 	init_rand_seed(&td->bsrange_state, td->rand_seeds[FIO_RAND_BS_OFF], use64);
-	init_rand_seed(&td->verify_state, td->rand_seeds[FIO_RAND_VER_OFF], use64);
+	td_fill_verify_state_seed(td);
 	init_rand_seed(&td->rwmix_state, td->rand_seeds[FIO_RAND_MIX_OFF], false);
 
 	if (td->o.file_service_type == FIO_FSERVICE_RANDOM)
@@ -1329,7 +1347,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 	if (!o->filename && !td->files_index && !o->read_iolog_file) {
 		file_alloced = 1;
 
-		if (o->nr_files == 1 && exists_and_not_file(jobname))
+		if (o->nr_files == 1 && exists_and_not_regfile(jobname))
 			add_file(td, jobname, job_add_num, 0);
 		else {
 			for (i = 0; i < o->nr_files; i++)
@@ -1401,6 +1419,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_LAT,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1431,6 +1450,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_HIST,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1453,6 +1473,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_BW,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1466,6 +1487,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			o->bw_avg_time = p.avg_msec;
 	
 		p.hist_msec = o->log_hist_msec;
+		p.hist_coarseness = o->log_hist_coarseness;
 
 		if (p.log_gz_store)
 			suf = "log.fz";
@@ -1481,6 +1503,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			.td = td,
 			.avg_msec = o->log_avg_msec,
 			.hist_msec = o->log_hist_msec,
+			.hist_coarseness = o->log_hist_coarseness,
 			.log_type = IO_LOG_TYPE_IOPS,
 			.log_offset = o->log_offset,
 			.log_gz = o->log_gz,
@@ -1494,6 +1517,7 @@ static int add_job(struct thread_data *td, const char *jobname, int job_add_num,
 			o->iops_avg_time = p.avg_msec;
 	
 		p.hist_msec = o->log_hist_msec;
+		p.hist_coarseness = o->log_hist_coarseness;
 
 		if (p.log_gz_store)
 			suf = "log.fz";

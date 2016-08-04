@@ -91,7 +91,7 @@ static int _fio_setup_rbd_data(struct thread_data *td,
 {
 	struct rbd_data *rbd;
 
-	if (td->io_ops->data)
+	if (td->io_ops_data)
 		return 0;
 
 	rbd = calloc(1, sizeof(struct rbd_data));
@@ -110,15 +110,20 @@ static int _fio_setup_rbd_data(struct thread_data *td,
 	return 0;
 
 failed:
-	if (rbd)
+	if (rbd) {
+		if (rbd->aio_events) 
+			free(rbd->aio_events);
+		if (rbd->sort_events)
+			free(rbd->sort_events);
 		free(rbd);
+	}
 	return 1;
 
 }
 
 static int _fio_rbd_connect(struct thread_data *td)
 {
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 	struct rbd_options *o = td->eo;
 	int r;
 
@@ -126,18 +131,26 @@ static int _fio_rbd_connect(struct thread_data *td)
 		char *client_name = NULL; 
 
 		/*
-		 * If we specify cluser name, the rados_creat2
+		 * If we specify cluser name, the rados_create2
 		 * will not assume 'client.'. name is considered
 		 * as a full type.id namestr
 		 */
-		if (!index(o->client_name, '.')) {
-			client_name = calloc(1, strlen("client.") +
-						strlen(o->client_name) + 1);
-			strcat(client_name, "client.");
-			o->client_name = strcat(client_name, o->client_name);
+		if (o->client_name) {
+			if (!index(o->client_name, '.')) {
+				client_name = calloc(1, strlen("client.") +
+						    strlen(o->client_name) + 1);
+				strcat(client_name, "client.");
+				strcat(client_name, o->client_name);
+			} else {
+				client_name = o->client_name;
+			}
 		}
+
 		r = rados_create2(&rbd->cluster, o->cluster_name,
-					o->client_name, 0);
+				 client_name, 0);
+
+		if (client_name && !index(o->client_name, '.'))
+			free(client_name);
 	} else
 		r = rados_create(&rbd->cluster, o->client_name);
 	
@@ -226,7 +239,7 @@ static void _fio_rbd_finish_aiocb(rbd_completion_t comp, void *data)
 
 static struct io_u *fio_rbd_event(struct thread_data *td, int event)
 {
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 
 	return rbd->aio_events[event];
 }
@@ -282,7 +295,7 @@ static int rbd_io_u_cmp(const void *p1, const void *p2)
 static int rbd_iter_events(struct thread_data *td, unsigned int *events,
 			   unsigned int min_evts, int wait)
 {
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 	unsigned int this_events = 0;
 	struct io_u *io_u;
 	int i, sidx;
@@ -361,7 +374,7 @@ static int fio_rbd_getevents(struct thread_data *td, unsigned int min,
 
 static int fio_rbd_queue(struct thread_data *td, struct io_u *io_u)
 {
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 	struct fio_rbd_iou *fri = io_u->engine_data;
 	int r = -1;
 
@@ -439,7 +452,7 @@ failed:
 
 static void fio_rbd_cleanup(struct thread_data *td)
 {
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 
 	if (rbd) {
 		_fio_rbd_disconnect(rbd);
@@ -467,7 +480,7 @@ static int fio_rbd_setup(struct thread_data *td)
 		log_err("fio_setup_rbd_data failed.\n");
 		goto cleanup;
 	}
-	td->io_ops->data = rbd;
+	td->io_ops_data = rbd;
 
 	/* librbd does not allow us to run first in the main thread and later
 	 * in a fork child. It needs to be the same process context all the
@@ -526,7 +539,7 @@ static int fio_rbd_open(struct thread_data *td, struct fio_file *f)
 static int fio_rbd_invalidate(struct thread_data *td, struct fio_file *f)
 {
 #if defined(CONFIG_RBD_INVAL)
-	struct rbd_data *rbd = td->io_ops->data;
+	struct rbd_data *rbd = td->io_ops_data;
 
 	return rbd_invalidate_cache(rbd->image);
 #else
