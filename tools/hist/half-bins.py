@@ -1,7 +1,14 @@
 #!/usr/bin/env python2.7
-import sys
+""" Cut the number bins in half in fio histogram output. Example usage:
 
-""" Cut the number bins in half in fio histogram output """
+        $ half-bins.py -c 2 output_clat_hist.1.log > smaller_clat_hist.1.log
+
+    Which merges e.g. bins [0 .. 3], [4 .. 7], ..., [1212 .. 1215] resulting in
+    304 = 1216 / (2**2) merged bins per histogram sample.
+
+    @author Karl Cronburg <karl.cronburg@gmail.com>
+"""
+import sys
 
 def main(ctx):
     stride = 1 << ctx.coarseness

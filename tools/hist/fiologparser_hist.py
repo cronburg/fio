@@ -4,17 +4,46 @@
     
     Example usage:
     
-            $ fiologparser-hist.py *_clat_hist*
+            $ fiologparser_hist.py *_clat_hist*
             end-time, samples, min, avg, median, 90%, 95%, 99%, max
-            1000, 15, 192.000, 1678.107, 1788.859, 1856.076, 1880.040, 1899.208, 1888.000
-            2000, 43, 152.000, 1642.368, 1714.099, 1816.659, 1845.552, 1888.131, 1888.000
+            1000, 15, 192, 1678.107, 1788.859, 1856.076, 1880.040, 1899.208, 1888.000
+            2000, 43, 152, 1642.368, 1714.099, 1816.659, 1845.552, 1888.131, 1888.000
+            4000, 39, 1152, 1546.962, 1545.785, 1627.192, 1640.019, 1691.204, 1744
             ...
     
     Notes:
 
+    * end-times are calculated to be uniform increments of the --interval value given,
+      regardless of when histogram samples are reported. Of note:
+        
+        * Intervals with no samples are omitted. In the example above this means
+          "no statistics from 2 to 3 seconds" and "39 samples influenced the statistics
+          of the interval from 3 to 4 seconds".
+        
+        * Intervals with a single sample will have the same value for all statistics
+        
+    * The number of samples is unweighted, corresponding to the total number of samples
+      which have any effect whatsoever on the interval.
+
+    * Min statistics are computed using value of the lower boundary of the first bin
+      (in increasing bin order) with non-zero samples in it. Similarly for max,
+      we take the upper boundary of the last bin with non-zero samples in it.
+      This is semantically identical to taking the 0th and 100th percentiles with a
+      50% bin-width buffer (because percentiles are computed using mid-points of
+      the bins). This enforces the following nice properties:
+
+        * min <= 50th <= 90th <= 95th <= 99th <= max
+
+        * min and max are strict lower and upper bounds on the actual
+          min / max seen by fio (and reported in *_clat.* with averaging turned off).
+
+    * Average statistics use a standard weighted arithmetic mean.
+
     * Percentile statistics are computed using the weighted percentile method as
       described here: https://en.wikipedia.org/wiki/Percentile#Weighted_percentile
-      See weighted_percentile() and weights() methods.
+      See weights() method for details on how weights are computed for individual
+      samples. In process_interval() we further multiply by the height of each bin
+      to get weighted histograms.
     
     * We convert files given on the command line, assumed to be fio histogram files,
       on-the-fly into their corresponding differenced files i.e. non-cumulative histograms
@@ -73,6 +102,9 @@
             max_coarse = 8
             fncn = lambda z: list(map(lambda x: z/2**x if z % 2**x == 0 else nan, range(max_coarse + 1)))
             np.transpose(list(map(fncn, bins)))
+      
+      Also note that you can achieve the same downsampling / log file size reduction
+      by pre-processing (before inputting into this script) with half_bins.py.
 
     * If you have not adjusted GROUP_NR for your (high latency) application, then you
       will see the percentiles computed by this tool max out at the max latency bin
@@ -81,7 +113,7 @@
 
             https://www.cronburg.com/fio/max_latency_bin_value_bug.png
     
-    * Motivation for, the design decisions, and the implementation process are
+    * Motivation for, design decisions, and the implementation process are
       described in further detail here:
 
             https://www.cronburg.com/fio/cloud-latency-problem-measurement/
@@ -93,7 +125,6 @@ import sys
 import pandas
 import numpy as np
 
-debug = not (os.getenv("DEBUG") is None)
 err = sys.stderr.write
 
 def weighted_percentile(percs, vs, ws):
@@ -120,7 +151,7 @@ def weights(start_ts, end_ts, start, end):
         computation instead of for-loops.
     
         Note that samples with zero time length are effectively ignored
-        (we set their weight to zero). TODO: print warning always?
+        (we set their weight to zero).
 
         start_ts :: Array of start times for a set of samples
         end_ts   :: Array of end times for a set of samples
@@ -131,10 +162,9 @@ def weights(start_ts, end_ts, start, end):
     sbounds = np.maximum(start_ts, start).astype(float)
     ebounds = np.minimum(end_ts,   end).astype(float)
     ws = (ebounds - sbounds) / (end_ts - start_ts)
-    if debug and np.any(np.isnan(ws)):
-      err("WARNING: zero-length sample(s) detected. Possible culprits:\n")
-      err("  1) Using -bw when you should be using -lat.\n")
-      err("  2) Log file has bad or corrupt time values.\n")
+    if np.any(np.isnan(ws)):
+      err("WARNING: zero-length sample(s) detected. Log file corrupt"
+          " / bad time values? Ignoring these samples.\n")
     ws[np.where(np.isnan(ws))] = 0.0;
     return ws
 
@@ -159,7 +189,8 @@ __NON_HIST_COLUMNS = 3
 __TOTAL_COLUMNS = __HIST_COLUMNS + __NON_HIST_COLUMNS
     
 def sequential_diffs(head_row, times, rws, hists):
-    """ TODO: Make this code less disgusting in terms of numpy appending """
+    """ Take the difference of sequential (in time) histograms with the same
+        r/w direction, returning a new array of differenced histograms.  """
     result = np.empty(shape=(0, __HIST_COLUMNS))
     result_times = np.empty(shape=(1, 0))
     for i in range(8):
@@ -169,7 +200,6 @@ def sequential_diffs(head_row, times, rws, hists):
         result_times = np.append(times[idx], result_times)
     idx = np.argsort(result_times)
     return result[idx]
-    #np.diff(np.append(head_row, hists, axis=0), axis=0).astype(int)
 
 def read_chunk(head_row, rdr, sz):
     """ Read the next chunk of size sz from the given reader, computing the
@@ -273,19 +303,19 @@ def plat_idx_to_val_coarse(idx, coarseness, edge=0.5):
     # bin index with a max of 1536 bins (FIO_IO_U_PLAT_GROUP_NR = 24 in stat.h)
     stride = 1 << coarseness
     idx = idx * stride
-    lower = _plat_idx_to_val(idx, edge=edge)
-    upper = _plat_idx_to_val(idx + stride, edge=edge)
+    lower = _plat_idx_to_val(idx, edge=0.0)
+    upper = _plat_idx_to_val(idx + stride, edge=1.0)
     return lower + (upper - lower) * edge
 
-def print_all_stats(ctx, end, ss_cnt, mn, vs, ws, mx):
+def print_all_stats(ctx, end, mn, ss_cnt, vs, ws, mx):
     ps = weighted_percentile(percs, vs, ws)
 
     avg = weighted_average(vs, ws)
     values = [mn, avg] + list(ps) + [mx]
     row = [end, ss_cnt] + map(lambda x: float(x) / ctx.divisor, values)
-    fmt = "%d, %d, " + fmt_float_list(ctx, 7)
+    fmt = "%d, %d, %d, " + fmt_float_list(ctx, 5) + ", %d"
     print (fmt % tuple(row))
-        
+
 def update_extreme(val, fncn, new_val):
     """ Calculate min / max in the presence of None values """
     if val is None: return new_val
@@ -322,20 +352,23 @@ def process_interval(ctx, samples, iStart, iEnd):
     
         # Update total number of samples affecting current interval histogram:
         ss_cnt += np.sum(hs)
-
+        
         # Update min and max bin values seen if necessary:
         idx = np.where(hs != 0)[0]
         if idx.size > 0:
-            mn_bin_val = update_extreme(mn_bin_val, min, l_bvs[idx][0])
-            mx_bin_val = update_extreme(mx_bin_val, max, u_bvs[idx][-1])
+            mn_bin_val = update_extreme(mn_bin_val, min, l_bvs[max(0,           idx[0]  - 1)])
+            mx_bin_val = update_extreme(mx_bin_val, max, u_bvs[min(len(hs) - 1, idx[-1] + 1)])
 
-    if ss_cnt > 0: print_all_stats(ctx, iEnd, ss_cnt, mn_bin_val, bin_vals, iHist, mx_bin_val)
+    if ss_cnt > 0: print_all_stats(ctx, iEnd, mn_bin_val, ss_cnt, bin_vals, iHist, mx_bin_val)
 
 def guess_max_from_bins(ctx, hist_cols):
     """ Try to guess the GROUP_NR from given # of histogram
         columns seen in an input file """
     max_coarse = 8
-    bins = [1216,1280,1344,1408,1472,1536,1600,1664]
+    if ctx.group_nr < 19 or ctx.group_nr > 26:
+        bins = [ctx.group_nr * (1 << 6)]
+    else:
+        bins = [1216,1280,1344,1408,1472,1536,1600,1664]
     coarses = range(max_coarse + 1)
     fncn = lambda z: list(map(lambda x: z/2**x if z % 2**x == 0 else -10, coarses))
     
@@ -353,7 +386,7 @@ def guess_max_from_bins(ctx, hist_cols):
             "  - You recompiled fio with a different GROUP_NR. If so please specify this\n"
             "    new GROUP_NR on the command line with --group_nr\n")
         exit(1)
-    return bins[idx[1]]
+    return bins[idx[1][0]]
 
 def main(ctx):
 

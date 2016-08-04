@@ -1,5 +1,4 @@
-""" Cythonizing this gave an ~20% overall speedup. The call to min()
-    was the main culprit, which includes the str.split() and int()
+""" Cythonizing this gave an ~20% overall speedup
     (6.4 seconds out of a 35.5 second run).
 """
 import sys

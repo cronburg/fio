@@ -23,7 +23,7 @@ from itertools import islice
 import argparse
 import os
 from fiologparser_hist import weights, columns, weighted_percentile \
-    , debug, err, weighted_average, percs, fmt_float_list
+    , err, weighted_average, percs, fmt_float_list
 
 try:
     import pandas
