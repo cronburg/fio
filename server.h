@@ -184,7 +184,10 @@ struct cmd_iolog_pdu {
 	uint32_t compressed;
 	uint32_t log_offset;
 	uint8_t name[FIO_NET_NAME_MAX];
-	struct io_sample samples[0];
+	union {
+		struct io_sample samples[0];         // This when not histograms
+		struct io_u_plat_entry io_u_plat[0]; // This when log_type is histograms
+	};
 };
 
 struct cmd_job_option {

@@ -1790,6 +1790,36 @@ static int fio_append_text_log(struct sk_entry *first, struct io_log *log)
 		entry = fio_net_prep_cmd(FIO_NET_CMD_IOLOG, cur_log->log, size,
 						NULL, SK_F_VEC | SK_F_INLINE);
 		flist_add_tail(&entry->list, &first->next);
+
+		/*
+		if (cur_log->log_type == IO_LOG_TYPE_HIST) {
+			struct io_sample *s;
+			int log_offset;
+			uint64_t i, nr_samples, sample_size;
+			struct io_u_plat_entry *entry, *entry_before;
+			unsigned int *io_u_plat;
+			unsigned int *io_u_plat_before;
+			int stride = 1 << log->hist_coarseness;
+			
+			sample_size = size;
+			if (!sample_size)
+				continue;
+
+			s = __get_sample(cur_log->, 0, 0);
+			log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
+
+			nr_samples = sample_size / __log_entry_sz(log_offset);
+
+			for (i = 0; i < nr_samples; i++) {
+
+				io_entry = (struct io_u_plat_entry *) s->val;
+
+				entry = fio_net_prep_cmd(FIO_NET_CMD_IOLOG, 
+
+				flist_add_tail(&entry->list, &entry->next);
+			}
+		}*/
+		
 	}
 
 	return 0;
@@ -1830,7 +1860,10 @@ int fio_send_iolog(struct thread_data *td, struct io_log *log, const char *name)
 			struct io_sample *s = get_sample(log, cur_log, i);
 
 			s->time		= cpu_to_le64(s->time);
-			s->val		= cpu_to_le64(s->val);
+
+			if (log->log_type != IO_LOG_TYPE_HIST)
+				s->val = cpu_to_le64(s->val);
+
 			s->__ddir	= cpu_to_le32(s->__ddir);
 			s->bs		= cpu_to_le32(s->bs);
 
