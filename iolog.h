@@ -29,7 +29,10 @@ struct io_hist {
  */
 struct io_sample {
 	uint64_t time;
-	uint64_t val;
+	union {
+		uint64_t val; // Normal sample
+		struct io_u_plat_entry *io_u_plat; // Histogram sample
+	};
 	uint32_t __ddir;
 	uint32_t bs;
 };
@@ -148,6 +151,14 @@ static inline size_t __log_entry_sz(int log_offset)
 static inline size_t log_entry_sz(struct io_log *log)
 {
 	return __log_entry_sz(log->log_offset);
+}
+
+/*
+ * Number of bytes corresponding to actual entries in cur_log->log
+ */
+static inline uint64_t log_samples_sz(struct io_log *log, struct io_logs *cur_log)
+{
+	return cur_log->nr_samples * log_entry_sz(log);
 }
 
 static inline struct io_sample *__get_sample(void *samples, int log_offset,

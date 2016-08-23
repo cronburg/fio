@@ -686,30 +686,37 @@ static inline unsigned long hist_sum(int j, int stride, unsigned int *io_u_plat,
 	return sum;
 }
 
-static void flush_hist_samples(FILE *f, int hist_coarseness, void *samples,
-			       uint64_t sample_size)
+static void for_each_sample(void *samples, uint64_t samples_size, int *log_offset,
+			    void (*fncn)(struct io_sample *))
 {
 	struct io_sample *s;
-	int log_offset;
-	uint64_t i, j, nr_samples;
-	struct io_u_plat_entry *entry, *entry_before;
-	unsigned int *io_u_plat;
-	unsigned int *io_u_plat_before;
+	uint64_t i, nr_samples;
 
-	int stride = 1 << hist_coarseness;
-	
-	if (!sample_size)
+	if (!samples_size)
 		return;
 
 	s = __get_sample(samples, 0, 0);
-	log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
+	*log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
 
-	nr_samples = sample_size / __log_entry_sz(log_offset);
+	nr_samples = samples_size / __log_entry_sz(*log_offset);
 
 	for (i = 0; i < nr_samples; i++) {
-		s = __get_sample(samples, log_offset, i);
+		s = __get_sample(samples, *log_offset, i);
+		fncn(s);
+	}
+}
 
-		entry = (struct io_u_plat_entry *) s->val;
+static void flush_hist_samples(FILE *f, void *samples, uint64_t samples_size,
+			       int hist_coarseness)
+{
+	int j, log_offset;
+	struct io_u_plat_entry *entry, *entry_before;
+	unsigned int *io_u_plat, *io_u_plat_before;
+	int stride = 1 << hist_coarseness;
+
+	void __flush_hist_samples(struct io_sample *s)
+	{
+		entry = s->io_u_plat;
 		io_u_plat = entry->io_u_plat;
 
 		entry_before = flist_first_entry(&entry->list, struct io_u_plat_entry, list);
@@ -719,34 +726,22 @@ static void flush_hist_samples(FILE *f, int hist_coarseness, void *samples,
 						io_sample_ddir(s), s->bs);
 		for (j = 0; j < FIO_IO_U_PLAT_NR - stride; j += stride) {
 			fprintf(f, "%lu, ", hist_sum(j, stride, io_u_plat,
-						io_u_plat_before));
+						     io_u_plat_before));
 		}
 		fprintf(f, "%lu\n", (unsigned long)
-		        hist_sum(FIO_IO_U_PLAT_NR - stride, stride, io_u_plat,
+			hist_sum(FIO_IO_U_PLAT_NR - stride, stride, io_u_plat,
 					io_u_plat_before));
 
 		flist_del(&entry_before->list);
 		free(entry_before);
 	}
+	for_each_sample(samples, samples_size, &log_offset, __flush_hist_samples);
 }
 
-void flush_samples(FILE *f, void *samples, uint64_t sample_size)
+void flush_samples(FILE *f, void *samples, uint64_t samples_size)
 {
-	struct io_sample *s;
 	int log_offset;
-	uint64_t i, nr_samples;
-
-	if (!sample_size)
-		return;
-
-	s = __get_sample(samples, 0, 0);
-	log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
-
-	nr_samples = sample_size / __log_entry_sz(log_offset);
-
-	for (i = 0; i < nr_samples; i++) {
-		s = __get_sample(samples, log_offset, i);
-
+	void _flush_samples(struct io_sample *s) {
 		if (!log_offset) {
 			fprintf(f, "%lu, %lu, %u, %u\n",
 					(unsigned long) s->time,
@@ -762,6 +757,7 @@ void flush_samples(FILE *f, void *samples, uint64_t sample_size)
 					(unsigned long long) so->offset);
 		}
 	}
+	for_each_sample(samples, samples_size, &log_offset, _flush_samples);
 }
 
 #ifdef CONFIG_ZLIB
@@ -1060,11 +1056,10 @@ void flush_log(struct io_log *log, bool do_append)
 		cur_log = flist_first_entry(&log->io_logs, struct io_logs, list);
 		flist_del_init(&cur_log->list);
 		
-		if (log == log->td->clat_hist_log)
-			flush_hist_samples(f, log->hist_coarseness, cur_log->log,
-			                   cur_log->nr_samples * log_entry_sz(log));
+		if (log->log_type == IO_LOG_TYPE_HIST)
+			flush_hist_samples(f, cur_log->log, log_samples_sz(log, cur_log), log->hist_coarseness);
 		else
-			flush_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
+			flush_samples(f, cur_log->log, log_samples_sz(log, cur_log));
 		
 		sfree(cur_log);
 	}
