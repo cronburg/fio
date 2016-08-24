@@ -40,7 +40,7 @@ struct fio_net_cmd_reply {
 enum {
 	FIO_SERVER_VER			= 56,
 
-	FIO_SERVER_MAX_FRAGMENT_PDU	= 1024,
+	FIO_SERVER_MAX_FRAGMENT_PDU	= 8192, //1024,
 	FIO_SERVER_MAX_CMD_MB		= 2048,
 
 	FIO_NET_CMD_QUIT		= 1,
@@ -181,10 +181,12 @@ struct cmd_iolog_pdu {
 	uint64_t nr_samples;
 	uint32_t thread_number;
 	uint32_t log_type;
+	uint32_t log_hist_coarseness;
 	uint32_t compressed;
 	uint32_t log_offset;
 	uint8_t name[FIO_NET_NAME_MAX];
 	struct io_sample samples[0];
+	unsigned int io_u_plats[0];
 };
 
 struct cmd_job_option {

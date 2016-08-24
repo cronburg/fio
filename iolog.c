@@ -686,11 +686,20 @@ static inline unsigned long hist_sum(int j, int stride, unsigned int *io_u_plat,
 	return sum;
 }
 
-static void for_each_sample(void *samples, uint64_t samples_size, int *log_offset,
-			    void (*fncn)(struct io_sample *))
+/*
+ * Do fncn() for each sample given only a log pointer (and its size)
+ */
+static void _for_each_sample(void *samples, uint64_t samples_size, int *log_offset,
+			    int *nr_samples, void (*fncn)(struct io_sample *))
 {
 	struct io_sample *s;
-	uint64_t i, nr_samples;
+	uint64_t i;
+	int _log_offset, _nr_samples;
+
+	if (!log_offset)
+		log_offset = &_log_offset;
+	if (!nr_samples)
+		nr_samples = &_nr_samples;
 
 	if (!samples_size)
 		return;
@@ -698,15 +707,21 @@ static void for_each_sample(void *samples, uint64_t samples_size, int *log_offse
 	s = __get_sample(samples, 0, 0);
 	*log_offset = (s->__ddir & LOG_OFFSET_SAMPLE_BIT) != 0;
 
-	nr_samples = samples_size / __log_entry_sz(*log_offset);
+	*nr_samples = samples_size / __log_entry_sz(*log_offset);
 
-	for (i = 0; i < nr_samples; i++) {
+	for (i = 0; i < *nr_samples; i++) {
 		s = __get_sample(samples, *log_offset, i);
 		fncn(s);
 	}
 }
 
-static void flush_hist_samples(FILE *f, void *samples, uint64_t samples_size,
+void for_each_sample(struct io_log *log, struct io_logs *cur_log,
+    		     void (*fncn)(struct io_sample *))
+{
+	_for_each_sample(cur_log->log, log_samples_sz(log, cur_log), NULL, NULL, fncn);
+}
+
+void flush_hist_samples(FILE *f, void *samples, uint64_t samples_size,
 			       int hist_coarseness)
 {
 	int j, log_offset;
@@ -735,7 +750,7 @@ static void flush_hist_samples(FILE *f, void *samples, uint64_t samples_size,
 		flist_del(&entry_before->list);
 		free(entry_before);
 	}
-	for_each_sample(samples, samples_size, &log_offset, __flush_hist_samples);
+	_for_each_sample(samples, samples_size, &log_offset, NULL, __flush_hist_samples);
 }
 
 void flush_samples(FILE *f, void *samples, uint64_t samples_size)
@@ -757,7 +772,7 @@ void flush_samples(FILE *f, void *samples, uint64_t samples_size)
 					(unsigned long long) so->offset);
 		}
 	}
-	for_each_sample(samples, samples_size, &log_offset, _flush_samples);
+	_for_each_sample(samples, samples_size, &log_offset, NULL, _flush_samples);
 }
 
 #ifdef CONFIG_ZLIB

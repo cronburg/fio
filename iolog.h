@@ -120,7 +120,7 @@ struct io_log {
 	 */
 	struct io_hist hist_window[DDIR_RWDIR_CNT];
 	unsigned long hist_msec;
-	int hist_coarseness;
+	unsigned int hist_coarseness;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
@@ -167,6 +167,8 @@ static inline struct io_sample *__get_sample(void *samples, int log_offset,
 	uint64_t sample_offset = sample * __log_entry_sz(log_offset);
 	return (struct io_sample *) ((char *) samples + sample_offset);
 }
+
+void for_each_sample(struct io_log *, struct io_logs *, void (*)(struct io_sample *));
 
 struct io_logs *iolog_cur_log(struct io_log *);
 uint64_t iolog_nr_samples(struct io_log *);
@@ -270,6 +272,7 @@ extern void finalize_logs(struct thread_data *td, bool);
 extern void setup_log(struct io_log **, struct log_params *, const char *);
 extern void flush_log(struct io_log *, bool);
 extern void flush_samples(FILE *, void *, uint64_t);
+extern void flush_hist_samples(FILE *, void *, uint64_t, int);
 extern void free_log(struct io_log *);
 extern void fio_writeout_logs(bool);
 extern void td_writeout_logs(struct thread_data *, bool);

@@ -1294,8 +1294,15 @@ static int fio_client_handle_iolog(struct fio_client *client,
 			return 1;
 		}
 
-		flush_samples(f, pdu->samples,
-				pdu->nr_samples * sizeof(struct io_sample));
+		if (pdu->log_type != IO_LOG_TYPE_HIST)
+			flush_samples(f, pdu->samples,
+					pdu->nr_samples * sizeof(struct io_sample));
+		else {
+			flush_hist_samples(f, pdu->samples,
+					   pdu->nr_samples * sizeof(struct io_sample),
+					   pdu->log_hist_coarseness);
+		}
+		
 		fclose(f);
 		return 0;
 	}
@@ -1395,11 +1402,14 @@ static struct cmd_iolog_pdu *convert_iolog_gz(struct fio_net_cmd *cmd,
 	 */
 	nr_samples = le64_to_cpu(pdu->nr_samples);
 
-	total = nr_samples * __log_entry_sz(le32_to_cpu(pdu->log_offset));
+	total = cmd->pdu_len - sizeof(*pdu); //nr_samples * __log_entry_sz(le32_to_cpu(pdu->log_offset));
 	ret = malloc(total + sizeof(*pdu));
 	ret->nr_samples = nr_samples;
+	//ret->log_type = le32_to_cpu(pdu->log_type);
+	//ret->log_hist_coarseness = le32_to_cpu(pdu->log_hist_coarseness);
 
 	memcpy(ret, pdu, sizeof(*pdu));
+	ret->log_offset = le32_to_cpu(pdu->log_offset);
 
 	p = (void *) ret + sizeof(*pdu);
 
@@ -1417,6 +1427,7 @@ static struct cmd_iolog_pdu *convert_iolog_gz(struct fio_net_cmd *cmd,
 		stream.next_out = p;
 		err = inflate(&stream, Z_NO_FLUSH);
 		/* may be Z_OK, or Z_STREAM_END */
+		if (err == -5) break;
 		if (err < 0) {
 			log_err("fio: inflate error %d\n", err);
 			free(ret);
@@ -1431,6 +1442,15 @@ static struct cmd_iolog_pdu *convert_iolog_gz(struct fio_net_cmd *cmd,
 
 err:
 	inflateEnd(&stream);
+
+	if (pdu->log_type == IO_LOG_TYPE_HIST) {
+		int i;
+		struct io_sample *s;
+		for (i = 0; i < pdu->nr_samples; i++) {
+			s = __get_sample(ret->io_u_plats, ret->log_offset, i);
+			s->io_u_plat = (struct io_u_plat_entry *)(ret->io_u_plats + pdu->nr_samples * sizeof(*s) + sizeof(struct io_u_plat_entry) * i);
+		}
+	}
 	return ret;
 #else
 	return NULL;
@@ -1476,6 +1496,7 @@ static struct cmd_iolog_pdu *convert_iolog(struct fio_net_cmd *cmd,
 	ret->nr_samples		= le64_to_cpu(ret->nr_samples);
 	ret->thread_number	= le32_to_cpu(ret->thread_number);
 	ret->log_type		= le32_to_cpu(ret->log_type);
+	ret->log_hist_coarseness = le32_to_cpu(ret->log_hist_coarseness);
 	ret->compressed		= le32_to_cpu(ret->compressed);
 	ret->log_offset		= le32_to_cpu(ret->log_offset);
 

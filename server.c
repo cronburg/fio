@@ -1660,13 +1660,13 @@ static int __fio_append_iolog_gz(struct sk_entry *first, struct io_log *log,
 	unsigned int this_len;
 	void *out_pdu;
 	int ret;
+	struct sk_entry *entry;
+	int gz_ret = 0;
 
 	stream->next_in = (void *) cur_log->log;
-	stream->avail_in = cur_log->nr_samples * log_entry_sz(log);
+	stream->avail_in = log_samples_sz(log, cur_log);
 
 	do {
-		struct sk_entry *entry;
-
 		/*
 		 * Dirty - since the log is potentially huge, compress it into
 		 * FIO_SERVER_MAX_FRAGMENT_PDU chunks and let the receiving
@@ -1680,7 +1680,8 @@ static int __fio_append_iolog_gz(struct sk_entry *first, struct io_log *log,
 		/* may be Z_OK, or Z_STREAM_END */
 		if (ret < 0) {
 			free(out_pdu);
-			return 1;
+			gz_ret = 1;
+			break;
 		}
 
 		this_len = FIO_SERVER_MAX_FRAGMENT_PDU - stream->avail_out;
@@ -1688,9 +1689,40 @@ static int __fio_append_iolog_gz(struct sk_entry *first, struct io_log *log,
 		entry = fio_net_prep_cmd(FIO_NET_CMD_IOLOG, out_pdu, this_len,
 					 NULL, SK_F_VEC | SK_F_INLINE | SK_F_FREE);
 		flist_add_tail(&entry->list, &first->next);
+		
 	} while (stream->avail_in);
+		
+	if (log->log_type == IO_LOG_TYPE_HIST) {
+		int i;
 
-	return 0;
+		for (i = 0; i < cur_log->nr_samples; i++) {
+			struct io_sample *s = get_sample(log, cur_log, i);
+			stream->next_in = (void *)s->io_u_plat->io_u_plat;
+			stream->avail_in = FIO_IO_U_PLAT_NR * sizeof(unsigned int);
+
+			do {
+				out_pdu = malloc(FIO_SERVER_MAX_FRAGMENT_PDU);
+				stream->avail_out = FIO_SERVER_MAX_FRAGMENT_PDU;
+				stream->next_out = out_pdu;
+
+				ret = deflate(stream, Z_BLOCK);
+				if (ret < 0) {
+					free(out_pdu);
+					gz_ret = 1;
+					break;
+				}
+
+				this_len = FIO_SERVER_MAX_FRAGMENT_PDU - stream->avail_out;
+				
+				entry = fio_net_prep_cmd(FIO_NET_CMD_IOLOG, out_pdu, this_len,
+							 NULL, SK_F_VEC | SK_F_INLINE | SK_F_FREE);
+				flist_add_tail(&entry->list, &first->next);
+			} while (stream->avail_in);
+		}
+
+	}	
+
+	return gz_ret;
 }
 
 static int fio_append_iolog_gz(struct sk_entry *first, struct io_log *log)
@@ -1708,11 +1740,12 @@ static int fio_append_iolog_gz(struct sk_entry *first, struct io_log *log)
 
 	while (!flist_empty(&log->io_logs)) {
 		struct io_logs *cur_log;
-
+		
 		cur_log = flist_first_entry(&log->io_logs, struct io_logs, list);
 		flist_del_init(&cur_log->list);
 
 		ret = __fio_append_iolog_gz(first, log, cur_log, &stream);
+
 		if (ret)
 			break;
 	}
@@ -1785,7 +1818,7 @@ static int fio_append_text_log(struct sk_entry *first, struct io_log *log)
 		cur_log = flist_first_entry(&log->io_logs, struct io_logs, list);
 		flist_del_init(&cur_log->list);
 
-		size = cur_log->nr_samples * log_entry_sz(log);
+		size = log_samples_sz(log, cur_log);
 
 		entry = fio_net_prep_cmd(FIO_NET_CMD_IOLOG, cur_log->log, size,
 						NULL, SK_F_VEC | SK_F_INLINE);
@@ -1805,6 +1838,7 @@ int fio_send_iolog(struct thread_data *td, struct io_log *log, const char *name)
 	pdu.nr_samples = cpu_to_le64(iolog_nr_samples(log));
 	pdu.thread_number = cpu_to_le32(td->thread_number);
 	pdu.log_type = cpu_to_le32(log->log_type);
+	pdu.log_hist_coarseness = cpu_to_le32(log->hist_coarseness);
 
 	if (!flist_empty(&log->chunk_list))
 		pdu.compressed = __cpu_to_le32(STORE_COMPRESSED);
@@ -1822,15 +1856,12 @@ int fio_send_iolog(struct thread_data *td, struct io_log *log, const char *name)
 	 */
 	flist_for_each(entry, &log->io_logs) {
 		struct io_logs *cur_log;
-		int i;
-
-		cur_log = flist_entry(entry, struct io_logs, list);
-
-		for (i = 0; i < cur_log->nr_samples; i++) {
-			struct io_sample *s = get_sample(log, cur_log, i);
-
+		
+		void _sample_to_le(struct io_sample *s)
+		{
 			s->time		= cpu_to_le64(s->time);
-			s->val		= cpu_to_le64(s->val);
+			if (log->log_type != IO_LOG_TYPE_HIST)
+				s->val	= cpu_to_le64(s->val);
 			s->__ddir	= cpu_to_le32(s->__ddir);
 			s->bs		= cpu_to_le32(s->bs);
 
@@ -1840,6 +1871,9 @@ int fio_send_iolog(struct thread_data *td, struct io_log *log, const char *name)
 				so->offset = cpu_to_le64(so->offset);
 			}
 		}
+
+		cur_log = flist_entry(entry, struct io_logs, list);
+		for_each_sample(log, cur_log, _sample_to_le);
 	}
 
 	/*
