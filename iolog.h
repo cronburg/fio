@@ -150,6 +150,11 @@ static inline size_t log_entry_sz(struct io_log *log)
 	return __log_entry_sz(log->log_offset);
 }
 
+static inline size_t log_sample_sz(struct io_log *log, struct io_logs *cur_log)
+{
+	return cur_log->nr_samples * log_entry_sz(log);
+}
+
 static inline struct io_sample *__get_sample(void *samples, int log_offset,
 					     uint64_t sample)
 {

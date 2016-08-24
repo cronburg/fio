@@ -1062,9 +1062,9 @@ void flush_log(struct io_log *log, bool do_append)
 		
 		if (log == log->td->clat_hist_log)
 			flush_hist_samples(f, log->hist_coarseness, cur_log->log,
-			                   cur_log->nr_samples * log_entry_sz(log));
+			                   log_sample_sz(log, cur_log));
 		else
-			flush_samples(f, cur_log->log, cur_log->nr_samples * log_entry_sz(log));
+			flush_samples(f, cur_log->log, log_sample_sz(log, cur_log));
 		
 		sfree(cur_log);
 	}
