@@ -291,6 +291,13 @@ def main(ctx):
             arr = arr.astype(int)
             
             if arr.size > 0:
+
+                # Jump immediately to the start of the input, rounding
+                # down to the nearest multiple of the interval (useful when --log_unix_epoch
+                # was used to create these histograms):
+                if start == 0 and arr[0][0] > end:
+                    start = arr[0][0] - (arr[0][0] % ctx.interval)
+
                 process_interval(ctx, arr, start, end)
                 
                 # Update arr to throw away samples we no longer need - samples which
@@ -346,6 +353,13 @@ if __name__ == '__main__':
         default=19,
         type=int,
         help='FIO_IO_U_PLAT_GROUP_NR as defined in stat.h')
+
+    arg('--job_file',
+        default=None,
+        type=str,
+        help='Optional argument pointing to the job file used to create the '
+             'given histogram files. Useful for auto-detecting --log_hist_msec and '
+             '--log_epoch_unix (in fio) values.')
 
     main(p.parse_args())
 

@@ -674,14 +674,19 @@ void free_log(struct io_log *log)
 	sfree(log);
 }
 
-static inline unsigned long hist_sum(int j, int stride, unsigned int *io_u_plat,
+inline unsigned long hist_sum(int j, int stride, unsigned int *io_u_plat,
 		unsigned int *io_u_plat_last)
 {
 	unsigned long sum;
 	int k;
 
-	for (k = sum = 0; k < stride; k++)
-		sum += io_u_plat[j + k] - io_u_plat_last[j + k];
+	if (io_u_plat_last) {
+		for (k = sum = 0; k < stride; k++)
+			sum += io_u_plat[j + k] - io_u_plat_last[j + k];
+	} else {
+		for (k = sum = 0; k < stride; k++)
+			sum += io_u_plat[j + k];
+	}
 
 	return sum;
 }

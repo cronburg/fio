@@ -29,7 +29,10 @@ struct io_hist {
  */
 struct io_sample {
 	uint64_t time;
-	uint64_t val;
+	union {
+		uint64_t val;
+		struct io_u_plat_entry *plat_entry;
+	};
 	uint32_t __ddir;
 	uint32_t bs;
 };
@@ -264,6 +267,7 @@ extern void finalize_logs(struct thread_data *td, bool);
 extern void setup_log(struct io_log **, struct log_params *, const char *);
 extern void flush_log(struct io_log *, bool);
 extern void flush_samples(FILE *, void *, uint64_t);
+extern unsigned long hist_sum(int, int, unsigned int *, unsigned int *);
 extern void free_log(struct io_log *);
 extern void fio_writeout_logs(bool);
 extern void td_writeout_logs(struct thread_data *, bool);
