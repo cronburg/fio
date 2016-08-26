@@ -1681,11 +1681,11 @@ static int __deflate_pdu_buffer(void *next_in, unsigned int next_sz, void **out_
 	stream->avail_in = next_sz;
 	do {
 		if (! stream->avail_out) {
-			
+
 			__fio_net_prep_tail(stream, *out_pdu, last_entry, first);
 
 			*out_pdu = malloc(FIO_SERVER_MAX_FRAGMENT_PDU);
-			
+
 			stream->avail_out = FIO_SERVER_MAX_FRAGMENT_PDU;
 			stream->next_out = *out_pdu;
 		}
@@ -1697,7 +1697,7 @@ static int __deflate_pdu_buffer(void *next_in, unsigned int next_sz, void **out_
 			return 1;
 		}
 	} while (stream->avail_in);
-	
+
 	return 0;
 }
 
@@ -1737,7 +1737,7 @@ static int __fio_append_iolog_gz_hist(struct sk_entry *first, struct io_log *log
 
 		flist_del(&prev_plat_entry->list);
 		free(prev_plat_entry);
-		
+
 		ret = __deflate_pdu_buffer(cur_plat_entry, sizeof(*cur_plat_entry),
 					   &out_pdu, &entry, stream, first);
 

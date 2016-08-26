@@ -1533,9 +1533,10 @@ static struct cmd_iolog_pdu *convert_iolog(struct fio_net_cmd *cmd,
 	for (i = 0; i < ret->nr_samples; i++) {
 		struct io_sample *s;
 
-		s = __get_sample(samples, ret->log_offset, i);
 		if (ret->log_type == IO_LOG_TYPE_HIST)
 			s = (struct io_sample *)((void *)s + sizeof(struct io_u_plat_entry) * i);
+		else
+			s = __get_sample(samples, ret->log_offset, i);
 
 		s->time		= le64_to_cpu(s->time);
 		s->val		= le64_to_cpu(s->val);
