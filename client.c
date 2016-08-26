@@ -1271,7 +1271,7 @@ static void client_flush_hist_samples(FILE *f, int hist_coarseness, void *sample
 	nr_samples = sample_size / __log_entry_sz(log_offset);
 
 	for (i = 0; i < nr_samples; i++) {
-		
+
 		s = (struct io_sample *)((char *)__get_sample(samples, log_offset, i) +
 			i * sizeof(struct io_u_plat_entry));
 
@@ -1285,7 +1285,7 @@ static void client_flush_hist_samples(FILE *f, int hist_coarseness, void *sample
 		}
 		fprintf(f, "%lu\n", (unsigned long)
 			hist_sum(FIO_IO_U_PLAT_NR - stride, stride, io_u_plat, NULL));
-	
+
 	}
 }
 
@@ -1464,9 +1464,7 @@ static struct cmd_iolog_pdu *convert_iolog_gz(struct fio_net_cmd *cmd,
 		stream.next_out = p;
 		err = inflate(&stream, Z_NO_FLUSH);
 		/* may be Z_OK, or Z_STREAM_END */
-		if (pdu->log_type == IO_LOG_TYPE_HIST && err < 0) {
-			goto err;
-		} else if (err < 0) {
+		if (err < 0) {
 			log_err("fio: inflate error %d\n", err);
 			free(ret);
 			ret = NULL;
@@ -1549,7 +1547,7 @@ static struct cmd_iolog_pdu *convert_iolog(struct fio_net_cmd *cmd,
 
 			so->offset = le64_to_cpu(so->offset);
 		}
-	
+
 		if (ret->log_type == IO_LOG_TYPE_HIST) {
 			s->plat_entry = (struct io_u_plat_entry *)(((void *)s) + sizeof(*s));
 			s->plat_entry->list.next = NULL;
