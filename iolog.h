@@ -120,7 +120,7 @@ struct io_log {
 	 */
 	struct io_hist hist_window[DDIR_RWDIR_CNT];
 	unsigned long hist_msec;
-	int hist_coarseness;
+	unsigned int hist_coarseness;
 
 	pthread_mutex_t chunk_lock;
 	unsigned int chunk_seq;
